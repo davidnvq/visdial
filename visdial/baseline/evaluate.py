@@ -110,8 +110,11 @@ config = yaml.load(open(args.config_yml))
 
 if isinstance(args.gpu_ids, int):
     args.gpu_ids = [args.gpu_ids]
-
-device = torch.device('cuda')
+device = (
+    torch.device("cuda", args.gpu_ids[0])
+    if args.gpu_ids[0] >= 0
+    else torch.device("cpu")
+)
 
 # Print config and args.
 print(yaml.dump(config, default_flow_style=False))
@@ -150,7 +153,7 @@ val_dataloader = DataLoader(
     val_dataset,
     batch_size=config["solver"]["batch_size"]
     if config["model"]["decoder"] == "disc"
-    else 4,
+    else 5,
     num_workers=args.cpu_workers,
 )
 
@@ -165,8 +168,7 @@ decoder.word_embed = encoder.word_embed
 
 # Wrap encoder and decoder in a model.
 model = EncoderDecoderModel(encoder, decoder).to(device)
-
-if len(args.gpu_ids) > 1:
+if -1 not in args.gpu_ids:
     model = nn.DataParallel(model, args.gpu_ids)
 
 model_state_dict, _ = load_checkpoint(args.load_pthpath)

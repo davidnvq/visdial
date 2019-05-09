@@ -25,14 +25,8 @@ model:
 
 # Optimization related arguments
 solver:
-  batch_size: 2 # 56 x num_gpus is a good rule of thumb
-  num_epochs: 3
-  initial_lr: 0.01
+  batch_size: 32 # 56 x num_gpus is a good rule of thumb
+  num_epochs: 10
+  initial_lr: 1e-3
   training_splits: "train"  # "trainval"
-  lr_gamma: 0.1
-  lr_milestones: # epochs when lr —> lr * lr_gamma
-    - 4
-    - 7
-    - 10
-  warmup_factor: 0.2
-  warmup_epochs: 1
+

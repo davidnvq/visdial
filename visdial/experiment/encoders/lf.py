@@ -55,88 +55,81 @@ class LateFusionEncoder(nn.Module):
         nn.init.kaiming_uniform_(self.fusion.weight)
         nn.init.constant_(self.fusion.bias, 0)
 
-    def forward(self, batch, debug=False):
-
+    def forward(self, batch):
         # shape: (batch_size, img_feature_size) - CNN fc7 features
         # shape: (batch_size, num_proposals, img_feature_size) - RCNN features
-        # shape: [BS, NP, IS]
         img = batch["img_feat"]
-
-        # shape: [BS, 10, SEQ]
+        # shape: (batch_size, 10, max_sequence_length)
         ques = batch["ques"]
-
-        # shape: [BS, 10, SEQ x 2 x 10] <- concatenated q & a * 10 rounds
+        # shape: (batch_size, 10, max_sequence_length * 2 * 10)
+        # concatenated qa * 10 rounds
         hist = batch["hist"]
-
         # num_rounds = 10, even for test (padded dialog rounds at the end)
-        (BS, NR, SEQ), HS = ques.size(), self.config["lstm_hidden_size"]
-        NP, IS = img.size(1), img.size(2)
+        batch_size, num_rounds, max_sequence_length = ques.size()
 
         # embed questions
-        # shape: [BS x NR, SEQ]
-        ques = ques.view(BS * NR, SEQ)
-
-        # shape: [BS x NR, SEQ, WE]
+        ques = ques.view(batch_size * num_rounds, max_sequence_length)
         ques_embed = self.word_embed(ques)
 
-        # shape: [BS x NR, HS]
+        # shape: (batch_size * num_rounds, max_sequence_length,
+        #         lstm_hidden_size)
         _, (ques_embed, _) = self.ques_rnn(ques_embed, batch["ques_len"])
 
-        # embed history
-        # shape: [BS x NR, SEQ x 20]
-        hist = hist.view(BS * NR, SEQ * 20)
-
-        # shape: [BS x NR, SEQ x 20, WE]
-        hist_embed = self.word_embed(hist)
-
-        # shape: [BS x NR, HS]
-        _, (hist_embed, _) = self.hist_rnn(hist_embed, batch["hist_len"])
-
         # project down image features and ready for attention
-        # shape: [BS, NP, HS]
+        # shape: (batch_size, num_proposals, lstm_hidden_size)
         projected_image_features = self.image_features_projection(img)
 
-        # TODONE: below lines are the same as baseline
-
-        # shape: [BS, 1, NP, HS]
-        projected_image_features = projected_image_features.view(BS, 1, -1, HS)
-
-        # shape: [BS, NR, 1, HS]
-        projected_ques_features = ques_embed.view(BS, NR, 1, HS)
-
-        # shape: [BS, NR, NP, HS]
-        projected_ques_image = projected_image_features * projected_ques_features
-        projected_ques_image = self.dropout(projected_ques_image)
+        # repeat image feature vectors to be provided for every round
+        # shape: (batch_size * num_rounds, num_proposals, lstm_hidden_size)
+        projected_image_features = (
+            projected_image_features.view(
+                batch_size, 1, -1, self.config["lstm_hidden_size"]
+            )
+            .repeat(1, num_rounds, 1, 1)
+            .view(batch_size * num_rounds, -1, self.config["lstm_hidden_size"])
+        )
 
         # computing attention weights
-        # shape: [BS, NR, NP, 1]
-        image_attention_weights = self.attention_proj(projected_ques_image)
+        # shape: (batch_size * num_rounds, num_proposals)
+        projected_ques_features = ques_embed.unsqueeze(1).repeat(
+            1, img.shape[1], 1
+        )
+        projected_ques_image = (
+            projected_ques_features * projected_image_features
+        )
+        projected_ques_image = self.dropout(projected_ques_image)
+        image_attention_weights = self.attention_proj(
+            projected_ques_image
+        ).squeeze()
+        image_attention_weights = F.softmax(image_attention_weights, dim=-1)
 
-        # shape: [BS, NR, NP, 1]
-        image_attention_weights = F.softmax(image_attention_weights, dim=-2) # <- dim = NP
+        # shape: (batch_size * num_rounds, num_proposals, img_features_size)
+        img = (
+            img.view(batch_size, 1, -1, self.config["img_feature_size"])
+            .repeat(1, num_rounds, 1, 1)
+            .view(batch_size * num_rounds, -1, self.config["img_feature_size"])
+        )
 
-        # shape: [BS, 1, NP, IS]
-        img = img.view(BS, 1, NP, IS)
+        # multiply image features with their attention weights
+        # shape: (batch_size * num_rounds, num_proposals, img_feature_size)
+        image_attention_weights = image_attention_weights.unsqueeze(-1).repeat(
+            1, 1, self.config["img_feature_size"]
+        )
+        # shape: (batch_size * num_rounds, img_feature_size)
+        attended_image_features = (image_attention_weights * img).sum(1)
+        img = attended_image_features
 
-        # shape: [BS, NR, NP, 1] * [BS, (1), NP, IS] -> [BS, NR, NP, IS]
-        attended_image_features = image_attention_weights * img
+        # embed history
+        hist = hist.view(batch_size * num_rounds, max_sequence_length * 20)
+        hist_embed = self.word_embed(hist)
 
-        # shape: [BS, NR, IS]
-        img = attended_image_features.sum(dim=-2) # dim=NP
+        # shape: (batch_size * num_rounds, lstm_hidden_size)
+        _, (hist_embed, _) = self.hist_rnn(hist_embed, batch["hist_len"])
 
-        # shape: [BS x NR, IS]
-        img = img.view(BS * NR, IS)
-
-        # shape: [BS x NR, IS + HSx2]
         fused_vector = torch.cat((img, ques_embed, hist_embed), 1)
         fused_vector = self.dropout(fused_vector)
 
-        # shape: [BS x NR, HS]
         fused_embedding = torch.tanh(self.fusion(fused_vector))
-
-        # shape: [BS, NR, HS]
-        fused_embedding = fused_embedding.view(BS, NR, -1)
-
-        if debug:
-            return fused_embedding, image_attention_weights.squeeze(-1)
+        # shape: (batch_size, num_rounds, lstm_hidden_size)
+        fused_embedding = fused_embedding.view(batch_size, num_rounds, -1)
         return fused_embedding

@@ -25,14 +25,7 @@ model:
 
 # Optimization related arguments
 solver:
-  batch_size: 2 # 32 x num_gpus is a good rule of thumb
-  num_epochs: 3
-  initial_lr: 0.001         # overfit: should changed to 1e-3 rather than 1e-2
+  batch_size: 30 # 32 x num_gpus is a good rule of thumb
+  num_epochs: 15
+  initial_lr: 1e-3         # overfit: should changed to 1e-3 rather than 1e-2
   training_splits: "train"  # "trainval"
-  lr_gamma: 0.1
-  lr_milestones: # epochs when lr —> lr * lr_gamma
-    - 4
-    - 7
-    - 10
-  warmup_factor: 0.2
-  warmup_epochs: 1
