@@ -22,40 +22,44 @@ parser = argparse.ArgumentParser(
 		"Evaluate and/or generate EvalAI submission file."
 		)
 parser.add_argument(
-		"--config-yml",
-		default="configs/lf_disc_faster_rcnn_x101.yml",
+		"--config-ymls",
+		nargs="+",
+		default=['configs/lf_disc_faster_rcnn_x101.yml',
+		         'configs/lf_gen_faster_rcnn_x101.yml'],
 		help="Path to a config file listing reader, model and optimization "
 		     "parameters.",
 		)
 parser.add_argument(
 		"--split",
-		default="val",
+		default="test",
 		choices=["val", "test"],
 		help="Which split to evaluate upon.",
 		)
 parser.add_argument(
 		"--val-json",
-		default="data/visdial_1.0_val.json",
+		default="/home/ubuntu/datasets/visdial/data/visdial_1.0_val.json",
 		help="Path to VisDial v1.0 val data. This argument doesn't work when "
 		     "--split=test.",
 		)
 parser.add_argument(
 		"--val-dense-json",
-		default="data/visdial_1.0_val_dense_annotations.json",
+		default="/home/ubuntu/datasets/visdial/data/visdial_1.0_val_dense_annotations.json",
 		help="Path to VisDial v1.0 val dense annotations (if evaluating on val "
 		     "split). This argument doesn't work when --split=test.",
 		)
 parser.add_argument(
 		"--test-json",
-		default="data/visdial_1.0_test.json",
+		default="/home/ubuntu/datasets/visdial/data/visdial_1.0_test.json",
 		help="Path to VisDial v1.0 test data. This argument doesn't work when "
 		     "--split=val.",
 		)
 
 parser.add_argument_group("Evaluation related arguments")
 parser.add_argument(
-		"--load-pthpath",
-		default="checkpoints/checkpoint_xx.pth",
+		"--load-pthpaths",
+		nargs="+",
+		default=['/home/ubuntu/datasets/visdial/checkpoints/baselines/lf_disc_faster_rcnn_x101_trainval.pth',
+		         '/home/ubuntu/datasets/visdial/checkpoints/lf_gen_bilstm/may10/checkpoint_9.pth'],
 		help="Path to .pth file of pretrained checkpoint.",
 		)
 
@@ -90,7 +94,7 @@ parser.add_argument(
 parser.add_argument_group("Submission related arguments")
 parser.add_argument(
 		"--save-ranks-path",
-		default="logs/ranks.json",
+		default="logs/test_ranks.json",
 		help="Path (json) to save ranks, in a EvalAI submission format.",
 		)
 
@@ -108,7 +112,7 @@ torch.backends.cudnn.deterministic = True
 args = parser.parse_args()
 
 # keys: {"dataset", "model", "solver"}
-config = yaml.load(open(args.config_yml))
+config = yaml.load(open(args.config_ymls[0]))
 
 if isinstance(args.gpu_ids, int):
 	args.gpu_ids = [args.gpu_ids]
@@ -117,6 +121,7 @@ device = torch.device('cuda')
 
 # Print config and args.
 print(yaml.dump(config, default_flow_style=False))
+
 for arg in vars(args):
 	print("{:<20}: {}".format(arg, getattr(args, arg)))
 
@@ -124,89 +129,116 @@ for arg in vars(args):
 #   SETUP DATASET, DATALOADER, MODEL
 # =============================================================================
 
-if args.split == "val":
-	val_dataset = VisDialDataset(
-			config["dataset"],
-			args.val_json,
-			args.val_dense_json,
-			overfit=args.overfit,
-			in_memory=args.in_memory,
-			return_options=True,
-			add_boundary_toks=False
-			if config["model"]["decoder"] == "disc"
-			else True,
-			)
-else:
-	val_dataset = VisDialDataset(
-			config["dataset"],
-			args.test_json,
-			overfit=args.overfit,
-			in_memory=args.in_memory,
-			return_options=True,
-			add_boundary_toks=False
-			if config["model"]["decoder"] == "disc"
-			else True,
-			)
-val_dataloader = DataLoader(
-		val_dataset,
-		batch_size=config["solver"]["batch_size"]
-		if config["model"]["decoder"] == "disc"
-		else 4,
-		num_workers=args.cpu_workers,
-		)
+models = []
+dataloaders = []
+for i, config_yml in enumerate(args.config_ymls):
+	print('config_yml', config_yml)
+	config = yaml.load(open(config_yml))
 
-# Pass vocabulary to construct Embedding layer.
-encoder = Encoder(config["model"], val_dataset.vocabulary)
-decoder = Decoder(config["model"], val_dataset.vocabulary)
-print("Encoder: {}".format(config["model"]["encoder"]))
-print("Decoder: {}".format(config["model"]["decoder"]))
-
-# Share word embedding between encoder and decoder.
-decoder.word_embed = encoder.word_embed
-
-is_bilstm = config['model']['is_bilstm']
-
-# Wrap encoder and decoder in a model.
-model = EncoderDecoderModel(encoder, decoder, is_bilstm=is_bilstm)
-model = model.to(device)
-
-if len(args.gpu_ids) > 1:
-	model = nn.DataParallel(model, args.gpu_ids)
-
-if args.load_pthpath != '':
-	model_state_dict, _ = load_checkpoint(args.load_pthpath)
-	if isinstance(model, nn.DataParallel):
-		model.module.load_state_dict(model_state_dict)
+	if args.split == "val":
+		val_dataset = VisDialDataset(
+				config["dataset"],
+				args.val_json,
+				args.val_dense_json,
+				overfit=args.overfit,
+				in_memory=args.in_memory,
+				return_options=True,
+				add_boundary_toks=False
+				if config["model"]["decoder"] == "disc"
+				else True,
+				)
 	else:
-		model.load_state_dict(model_state_dict)
-	print("Loaded model from {}".format(args.load_pthpath))
+		val_dataset = VisDialDataset(
+				config["dataset"],
+				args.test_json,
+				overfit=args.overfit,
+				in_memory=args.in_memory,
+				return_options=True,
+				add_boundary_toks=False
+				if config["model"]["decoder"] == "disc"
+				else True,
+				)
+	val_dataloader = DataLoader(
+			val_dataset,
+			batch_size=2,
+			num_workers=args.cpu_workers,
+			)
+	dataloaders.append(iter(val_dataloader))
+
+	encoder = Encoder(config["model"], val_dataset.vocabulary)
+	decoder = Decoder(config["model"], val_dataset.vocabulary)
+	print("Encoder: {}".format(config["model"]["encoder"]))
+	print("Decoder: {}".format(config["model"]["decoder"]))
+
+	# Share word embedding between encoder and decoder.
+	decoder.word_embed = encoder.word_embed
+
+	is_bilstm = config['model']['is_bilstm']
+
+	# Wrap encoder and decoder in a model.
+	model = EncoderDecoderModel(encoder, decoder, is_bilstm=is_bilstm)
+	model = model.to(device)
+
+	if args.load_pthpaths[i] != '':
+		model_state_dict, _ = load_checkpoint(args.load_pthpaths[i])
+		if isinstance(model, nn.DataParallel):
+			model.module.load_state_dict(model_state_dict)
+		else:
+			model.load_state_dict(model_state_dict)
+		print("Loaded model from {}".format(args.load_pthpaths[i]))
+	models.append(model)
 
 # Declare metric accumulators (won't be used if --split=test)
-sparse_metrics = SparseGTMetrics()
-ndcg = NDCG()
+sparse_metrics_a = SparseGTMetrics()
+ndcg_a = NDCG()
+
+sparse_metrics_b = SparseGTMetrics()
+ndcg_b = NDCG()
+
+sparse_metrics_c = SparseGTMetrics()
+ndcg_c = NDCG()
 
 # =============================================================================
 #   EVALUATION LOOP
 # =============================================================================
+for model in models:
+	model.eval()
 
-model.eval()
 ranks_json = []
 
 all_outputs = []
 all_img_ids = []
 all_round_ids = []
 
-for _, batch in enumerate(tqdm(val_dataloader)):
+for i, batch in enumerate(tqdm(dataloaders[0])):
+
 	for key in batch:
 		batch[key] = batch[key].to(device)
+
 	with torch.no_grad():
-		output = model(batch)
+		output1 = models[0](batch)
+		# TODO: I add this line
+		output1 = torch.softmax(output1, dim=-1)
 
-	# TODO: I add this line
-	output = torch.softmax(output, dim=-1)
+	another_batch = next(dataloaders[1])
+	for key in another_batch:
+		another_batch[key] = another_batch[key].to(device)
 
-	ranks = scores_to_ranks(output)
-	all_outputs.append(output.cpu())
+	with torch.no_grad():
+		output2 = models[1](another_batch)
+		# TODO: I add this line
+		output2 = torch.softmax(output2, dim=-1)
+
+	output_a = (output1 + output2) / 2.0
+
+	disc_max_idx = output1.argmax(dim=-1)
+	output2[:, :, disc_max_idx] = output1[:, :, disc_max_idx]
+
+	output_b = output2
+	output_c = (output1 + output2) / 2.0
+
+	ranks = scores_to_ranks(output_a)
+	all_outputs.append(output_a.cpu())
 	all_img_ids.append(batch['img_ids'].cpu())
 	all_round_ids.append(batch['num_rounds'].cpu())
 
@@ -235,17 +267,36 @@ for _, batch in enumerate(tqdm(val_dataloader)):
 						)
 
 	if args.split == "val":
-		sparse_metrics.observe(output, batch["ans_ind"])
+		sparse_metrics_a.observe(output_a, batch["ans_ind"])
+		sparse_metrics_b.observe(output_b, batch["ans_ind"])
+		sparse_metrics_c.observe(output_c, batch["ans_ind"])
+
 		if "gt_relevance" in batch:
-			output = output[
-			         torch.arange(output.size(0)), batch["round_id"] - 1, :
-			         ]
-			ndcg.observe(output, batch["gt_relevance"])
+			output_a = output_a[torch.arange(output_a.size(0)), batch["round_id"] - 1, :]
+			ndcg_a.observe(output_a, batch["gt_relevance"])
+
+			output_b = output_b[torch.arange(output_b.size(0)), batch["round_id"] - 1, :]
+			ndcg_b.observe(output_b, batch["gt_relevance"])
+
+			output_c = output_c[torch.arange(output_c.size(0)), batch["round_id"] - 1, :]
+			ndcg_c.observe(output_c, batch["gt_relevance"])
 
 if args.split == "val":
 	all_metrics = {}
-	all_metrics.update(sparse_metrics.retrieve(reset=True))
-	all_metrics.update(ndcg.retrieve(reset=True))
+	all_metrics.update(sparse_metrics_a.retrieve(reset=True))
+	all_metrics.update(ndcg_a.retrieve(reset=True))
+	for metric_name, metric_value in all_metrics.items():
+		print(f"{metric_name}: {metric_value}")
+
+	all_metrics = {}
+	all_metrics.update(sparse_metrics_b.retrieve(reset=True))
+	all_metrics.update(ndcg_b.retrieve(reset=True))
+	for metric_name, metric_value in all_metrics.items():
+		print(f"{metric_name}: {metric_value}")
+
+	all_metrics = {}
+	all_metrics.update(sparse_metrics_c.retrieve(reset=True))
+	all_metrics.update(ndcg_c.retrieve(reset=True))
 	for metric_name, metric_value in all_metrics.items():
 		print(f"{metric_name}: {metric_value}")
 

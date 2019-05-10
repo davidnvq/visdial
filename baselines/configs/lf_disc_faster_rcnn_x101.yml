@@ -10,6 +10,7 @@ dataset:
   max_sequence_length: 20
   vocab_min_count: 5
 
+
 # Model related arguments
 model:
   encoder: 'lf'
@@ -19,13 +20,13 @@ model:
   word_embedding_size: 300
   lstm_hidden_size: 512
   lstm_num_layers: 2
-  dropout: 0.2
+  dropout: 0.5
   is_bilstm: true
 
 
 # Optimization related arguments
 solver:
-  batch_size: 16 # 32 x num_gpus is a good rule of thumb
-  num_epochs: 10
+  batch_size: 4 # 32 x num_gpus is a good rule of thumb
+  num_epochs: 15
   initial_lr: 1e-3         # overfit: should changed to 1e-3 rather than 1e-2
   training_splits: "train"  # "trainval"

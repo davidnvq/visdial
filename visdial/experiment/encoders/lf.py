@@ -29,6 +29,7 @@ class LateFusionEncoder(nn.Module):
             batch_first=True,
             dropout=config["dropout"],
         )
+
         self.dropout = nn.Dropout(p=config["dropout"])
 
         # questions and history are right padded sequences of variable length

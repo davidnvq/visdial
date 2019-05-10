@@ -49,6 +49,14 @@ parser.add_argument(
 		default="data/visdial_1.0_val.json",
 		help="Path to json file containing VisDial v1.0 validation data.",
 		)
+
+parser.add_argument(
+		"--lr",
+		default=1e-3,
+		type=float,
+		help="lr",
+		)
+
 parser.add_argument(
 		"--val-dense-json",
 		default="data/visdial_1.0_val_dense_annotations.json",
@@ -218,8 +226,10 @@ print("Decoder: {}".format(config["model"]["decoder"]))
 # Share word embedding between encoder and decoder.
 decoder.word_embed = encoder.word_embed
 
+is_bilstm = config['model']['is_bilstm']
+
 # Wrap encoder and decoder in a model.
-model = EncoderDecoderModel(encoder, decoder)
+model = EncoderDecoderModel(encoder, decoder, is_bilstm=is_bilstm)
 
 model = model.to(device)
 
@@ -246,7 +256,7 @@ else:
 	iterations = len(train_dataset) // config["solver"]["batch_size"] + 1
 	num_examples = torch.tensor(len(train_dataset), dtype=torch.float)
 
-optimizer = optim.Adam(model.parameters(), lr=1e-4)
+optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
 # =============================================================================
 #   SETUP BEFORE TRAINING LOOP
@@ -305,7 +315,8 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 			optimizer.zero_grad()
 			output = model(batch)
 
-			sparse_metrics.observe(output, batch["ans_ind"])
+			if config["model"]["decoder"] == "disc":
+				sparse_metrics.observe(output, batch["ans_ind"])
 
 			target = (
 				batch["ans_ind"]
@@ -341,18 +352,20 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 			experiment.log_metric('train/batch_loss', batch_loss.item())
 			epoch_loss += batch["ques"].size(0) * batch_loss.detach()
 
-		all_metrics = {}
-		all_metrics.update(sparse_metrics.retrieve(reset=True))
+		if config["model"]["decoder"] == "disc":
+			all_metrics = {}
+			all_metrics.update(sparse_metrics.retrieve(reset=True))
 
-		for metric_name, metric_value in all_metrics.items():
-			print(f"{metric_name}: {metric_value}")
-			experiment.log_metric(f"train/{metric_name}", metric_value)
+			for metric_name, metric_value in all_metrics.items():
+				print(f"{metric_name}: {metric_value}")
+				experiment.log_metric(f"train/{metric_name}", metric_value)
+			summary_writer.add_scalars(
+					"train/metrics", all_metrics, global_iteration_step
+					)
+
 
 		epoch_loss /= num_examples
 
-		summary_writer.add_scalars(
-				"train/metrics", all_metrics, global_iteration_step
-				)
 
 		summary_writer.add_scalar(
 				"train/epoch_loss", epoch_loss, i
@@ -391,16 +404,7 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 				         ]
 				ndcg.observe(output, batch["gt_relevance"])
 
-			epoch_loss += batch["ques"].size(0) * batch_loss.detach()
-
-		epoch_loss /= torch.tensor(len(val_dataset), dtype=torch.float)
-
 		monitor.export()
-
-		summary_writer.add_scalar(
-				"val/epoch_loss", epoch_loss, i
-				)
-		experiment.log_metric('val/epoch_loss', epoch_loss.item())
 
 		all_metrics = {}
 		all_metrics.update(sparse_metrics.retrieve(reset=True))

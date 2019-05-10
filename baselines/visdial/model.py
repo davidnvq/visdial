@@ -7,8 +7,7 @@ def update_weights(net, path):
     pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
     for key in pretrained_dict:
         special_keys = ['encoder.ques_rnn.rnn_model.weight_ih_l1',
-                        'encoder.hist_rnn.rnn_model.weight_ih_l1',
-                        'decoder.option_rnn.rnn_model.weight_ih_l1']
+                        'encoder.hist_rnn.rnn_model.weight_ih_l1']
         if key in special_keys:
             pretrained_dict[key] = torch.cat([pretrained_dict[key]]*2, dim=-1)
     model_dict.update(pretrained_dict)

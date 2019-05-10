@@ -199,24 +199,24 @@ class Window(tk.Frame):
 		else:
 			self.rel_ax = fig.add_subplot(111)
 
-		gtr_scores = self.img_dialogs[self.img_ids[img_index]]['gtr_scores']
-		gtr_texts = self.img_dialogs[self.img_ids[img_index]]['gtr_texts']
+		rel_scores = self.img_dialogs[self.img_ids[img_index]]['rel_scores']
+		rel_texts = self.img_dialogs[self.img_ids[img_index]]['rel_texts']
 
-		gtr_round_id = self.img_dialogs[self.img_ids[img_index]]['round_id']
-		gtr_pred = self.img_dialogs[self.img_ids[img_index]]['gtr_preds'][epoch_index]
+		rel_round_id = self.img_dialogs[self.img_ids[img_index]]['round_id']
+		rel_pred = self.img_dialogs[self.img_ids[img_index]]['rel_preds'][epoch_index]
 
-		num_opts = np.arange(len(gtr_scores))
+		num_opts = np.arange(len(rel_scores))
 
-		labels = [text[:80].capitalize() for text in gtr_texts]
+		labels = [text[:80].capitalize() for text in rel_texts]
 
-		self.rel_ax.bar(num_opts, gtr_scores, width=0.2,
+		self.rel_ax.bar(num_opts, rel_scores, width=0.2,
 		                color='green', align='center', label='GT')
-		self.rel_ax.bar(num_opts + 0.2, gtr_pred, width=0.2, color='orange',
+		self.rel_ax.bar(num_opts + 0.2, rel_pred, width=0.2, color='orange',
 		                align='center', label='Pred epoch{}'.format(epoch_index))
 		self.rel_ax.set_xticks(num_opts)
 		self.rel_ax.set_xticklabels(labels, rotation=75, ha='right')
 
-		title = 'Ground Truth & Prediction relevance for question {}, at epoch {}'.format(gtr_round_id, epoch_index)
+		title = 'Ground Truth & Prediction relevance for question {}, at epoch {}'.format(rel_round_id, epoch_index)
 		self.rel_ax.set_title(title)
 		self.rel_ax.autoscale(tight=True)
 		self.rel_ax.legend()
@@ -351,7 +351,7 @@ class Window(tk.Frame):
 
 
 if __name__ == '__main__':
-	file_path = 'data/lf_disc_monitor.pkl'
+	file_path = 'data/lf_disc_val.pkl'
 	prefix = 'VisualDialog_val2018_'
 	root_path = '~/datasets/visdial/val/val_images'
 	root_path = os.path.expanduser(root_path)

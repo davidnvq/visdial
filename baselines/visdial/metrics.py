@@ -27,7 +27,7 @@ predicted_ranks = predicted_ranks.squeeze(1)
 """
 import torch
 import pickle
-from nltk.tokenize.treebank import TreebankWordDetokenizer
+
 
 def scores_to_ranks(scores: torch.Tensor):
 	"""Convert model output scores into ranks."""
@@ -191,16 +191,14 @@ class Monitor(object):
 		self.save_path = save_path
 		self.img_dialogs = {}
 		self.img_ids = []
-		self.detokenize = TreebankWordDetokenizer().detokenize
 		self.init_dialogs()
-
 
 	def get_elem_dict(self, elem):
 
 		dialog = elem['dialog']
-		questions = [self.detokenize(r['question']) for r in dialog]
-		answers = [self.detokenize(r['answer']) for r in dialog]
-		opts = [[self.detokenize(r['answer_options'][i])
+		questions = [' '.join(r['question']) for r in dialog]
+		answers = [' '.join(r['answer']) for r in dialog]
+		opts = [[' '.join(r['answer_options'][i])
 		         for i in range(100)] for r in dialog]
 
 		scores = [[] for _ in range(10)]
@@ -217,11 +215,11 @@ class Monitor(object):
 			rel_indices = torch.cat([rel_indices, torch.tensor([rel_ans_idx])], dim=-1)
 			rel_scores = torch.cat([rel_scores, rel_scores[-1:]], dim=-1)
 
-		rel_texts = [self.detokenize(dialog[round_id]['answer_options'][idx])
+		rel_texts = [' '.join(dialog[round_id]['answer_options'][idx])
 		             for idx in rel_indices]
 
-		rel_question = self.detokenize(dialog[round_id]['question'])
-		rel_answer = self.detokenize(dialog[round_id]['answer'])
+		rel_question = ' '.join(dialog[round_id]['question'])
+		rel_answer = ' '.join(dialog[round_id]['answer'])
 
 		return {
 			'caption'     : elem['caption'],
@@ -248,8 +246,8 @@ class Monitor(object):
 		round_id = elem_dict['round_id']
 
 		# shape: [1, ] # 1 round - ground truth
-		rel_ans_idx = output[round_id - 1][elem_dict['rel_ans_idx']].cpu().numpy()
-		elem_dict['rel_preds'].append(rel_ans_idx)
+		gtr_pred = output[round_id - 1][elem_dict['gtr_idx']].cpu().numpy()
+		elem_dict['gtr_preds'].append(gtr_pred)
 
 		# All answers in 10 rounds
 		for r in range(10):

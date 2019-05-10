@@ -1,60 +1,48 @@
 from comet_ml import Experiment
 
-import os
-import yaml
-import torch
-import random
 import argparse
 import itertools
-import numpy as np
 
-from tqdm import tqdm
-from bisect import bisect
+from tensorboardX import SummaryWriter
+import torch
 from torch import nn, optim
 from torch.optim import lr_scheduler
-from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
+from tqdm import tqdm
+import yaml
+from bisect import bisect
 
+from visdial.data.dataset import VisDialDataset
 from visdial.encoders import Encoder
 from visdial.decoders import Decoder
+from visdial.metrics import SparseGTMetrics, NDCG
 from visdial.model import EncoderDecoderModel
-from visdial.data.dataset import VisDialDataset
-from visdial.metrics import SparseGTMetrics, NDCG, Monitor
 from visdial.utils.checkpointing import CheckpointManager, load_checkpoint
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-		"--seed",
-		type=int,
-		default=0,
-		help="For reproducibility",
-		)
-parser.add_argument(
 		"--config-yml",
-		default="configs/lf_disc_faster_rcnn_x101.yml",
-		help="Path to a config file listing reader, model and solver parameters.",
-		)
-parser.add_argument(
-		"--comet-name",
-		default="test",
+		default="configs/lf_gen_faster_rcnn_x101.yml",
 		help="Path to a config file listing reader, model and solver parameters.",
 		)
 parser.add_argument(
 		"--train-json",
-		default="data/visdial_1.0_train.json",
+		default="/home/ubuntu/datasets/myvisdial/data/visdial_1.0_train.json",
 		help="Path to json file containing VisDial v1.0 training data.",
 		)
 parser.add_argument(
 		"--val-json",
-		default="data/visdial_1.0_val.json",
+		default="/home/ubuntu/datasets/myvisdial/data/visdial_1.0_val.json",
 		help="Path to json file containing VisDial v1.0 validation data.",
 		)
 parser.add_argument(
 		"--val-dense-json",
-		default="data/visdial_1.0_val_dense_annotations.json",
+		default="/home/ubuntu/datasets/myvisdial/data/visdial_1.0_val_dense_annotations.json",
 		help="Path to json file containing VisDial v1.0 validation dense ground "
 		     "truth annotations.",
 		)
+
 parser.add_argument_group(
 		"Arguments independent of experiment reproducibility"
 		)
@@ -62,7 +50,7 @@ parser.add_argument(
 		"--gpu-ids",
 		nargs="+",
 		type=int,
-		default=0,
+		default=1,
 		help="List of ids of GPUs to use.",
 		)
 parser.add_argument(
@@ -91,22 +79,22 @@ parser.add_argument(
 parser.add_argument_group("Checkpointing related arguments")
 parser.add_argument(
 		"--save-dirpath",
-		default="checkpoints/",
+		default="/home/ubuntu/datasets/myvisdial/checkpoints/",
 		help="Path of directory to create checkpoint directory and save "
 		     "checkpoints.",
 		)
-parser.add_argument(
-		"--monitor-path",
-		default="data/lf_disc_val.pkl",
-		help="Path of directory to create checkpoint directory and save "
-		     "checkpoints.",
-		)
-
 parser.add_argument(
 		"--load-pthpath",
 		default="",
 		help="To continue training, path to .pth file of saved checkpoint.",
 		)
+
+# For reproducibility.
+# Refer https://pytorch.org/docs/stable/notes/randomness.html
+torch.manual_seed(0)
+torch.cuda.manual_seed_all(0)
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
 
 # =============================================================================
 #   INPUT ARGUMENTS AND CONFIG
@@ -120,12 +108,7 @@ config = yaml.load(open(args.config_yml))
 if isinstance(args.gpu_ids, int):
 	args.gpu_ids = [args.gpu_ids]
 
-if len(args.gpu_ids) == 1:
-	device = torch.device('cuda')
-elif len(args.gpu_ids) > 1:
-	device = torch.device('cuda')
-else:
-	device = torch.device('cpu')
+device = torch.device('cuda')
 
 # Print config and args.
 print(yaml.dump(config, default_flow_style=False))
@@ -134,50 +117,23 @@ for arg in vars(args):
 
 # Add the following code anywhere in your machine learning file
 experiment = Experiment(api_key='2z9VHjswAJWF1TV6x4WcFMVss',
-                        project_name=args.comet_name, workspace="lightcv")
+                        project_name='visdial-baselines', workspace="lightcv")
 
 experiment.log_asset(args.config_yml)
 
 for key in ['model', 'solver']:
 	experiment.log_parameters(config[key])
-
-# =============================================================================
-# For reproducibility.
-# =============================================================================
-# Refer https://pytorch.org/docs/stable/notes/randomness.html
-
-def seed_torch(seed=0):
-	random.seed(seed)
-	np.random.seed(seed)
-	torch.manual_seed(seed)
-	torch.cuda.manual_seed(seed)
-	torch.cuda.manual_seed_all(seed)
-	torch.backends.cudnn.benchmark = False
-	torch.backends.cudnn.deterministic = True
-	os.environ['PYTHONHASHSEED'] = str(seed)
-
-	def worker_init_fn(worker_id):
-		np.random.seed(seed + worker_id)
-
-	return worker_init_fn
-
-init_fn = seed_torch(args.seed)
-
 # =============================================================================
 #   SETUP DATASET, DATALOADER, MODEL, CRITERION, OPTIMIZER, SCHEDULER
 # =============================================================================
 
-is_abtoks = True if config["model"]["decoder"] != "disc" else False
-is_return = True if config["model"]["decoder"] == "disc" else False
-
-# TODO: Comment this overfit test
 train_dataset = VisDialDataset(
 		config["dataset"],
 		args.train_json,
 		overfit=args.overfit,
 		in_memory=args.in_memory,
-		return_options=is_return,
-		add_boundary_toks=is_abtoks,
+		return_options=False, # for gen
+		add_boundary_toks=True, # for gen
 		)
 train_dataloader = DataLoader(
 		train_dataset,
@@ -193,21 +149,15 @@ val_dataset = VisDialDataset(
 		overfit=args.overfit,
 		in_memory=args.in_memory,
 		return_options=True,
-		add_boundary_toks=is_abtoks,
+		add_boundary_toks=False if config["model"]["decoder"] == "disc" else True,
 		)
-
 val_dataloader = DataLoader(
 		val_dataset,
 		batch_size=config["solver"]["batch_size"]
 		if config["model"]["decoder"] == "disc"
-		else 5,
+		else 4,
 		num_workers=args.cpu_workers,
-		worker_init_fn=init_fn
 		)
-
-# TODO: Uncomment this overfit test
-# train_dataset = val_dataset
-# train_dataloader = val_dataloader
 
 # Pass vocabulary to construct Embedding layer.
 encoder = Encoder(config["model"], train_dataset.vocabulary)
@@ -219,13 +169,9 @@ print("Decoder: {}".format(config["model"]["decoder"]))
 decoder.word_embed = encoder.word_embed
 
 # Wrap encoder and decoder in a model.
-model = EncoderDecoderModel(encoder, decoder)
-
-model = model.to(device)
-
+model = EncoderDecoderModel(encoder, decoder).to(device)
 if len(args.gpu_ids) > 1:
-	model = nn.DataParallel(model)
-
+	model = nn.DataParallel(model, args.gpu_ids)
 
 # Loss function.
 if config["model"]["decoder"] == "disc":
@@ -241,31 +187,45 @@ if config["solver"]["training_splits"] == "trainval":
 	iterations = (len(train_dataset) + len(val_dataset)) // config["solver"][
 		"batch_size"
 	] + 1
-	num_examples = torch.tensor(len(train_dataset) + len(val_dataset), dtype=torch.float)
 else:
 	iterations = len(train_dataset) // config["solver"]["batch_size"] + 1
-	num_examples = torch.tensor(len(train_dataset), dtype=torch.float)
+
+
+def lr_lambda_fun(current_iteration: int) -> float:
+	"""Returns a learning rate multiplier.
+	Till `warmup_epochs`, learning rate linearly increases to `initial_lr`,
+	and then gets multiplied by `lr_gamma` every time a milestone is crossed.
+	"""
+	current_epoch = float(current_iteration) / iterations
+	if current_epoch <= config["solver"]["warmup_epochs"]:
+		alpha = current_epoch / float(config["solver"]["warmup_epochs"])
+		return config["solver"]["warmup_factor"] * (1.0 - alpha) + alpha
+	else:
+		idx = bisect(config["solver"]["lr_milestones"], current_epoch)
+		return pow(config["solver"]["lr_gamma"], idx)
+
 
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
+# scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda_fun)
+
 
 # =============================================================================
 #   SETUP BEFORE TRAINING LOOP
 # =============================================================================
+
 summary_writer = SummaryWriter(log_dir=args.save_dirpath)
 checkpoint_manager = CheckpointManager(
 		model, optimizer, args.save_dirpath, config=config
 		)
-
 sparse_metrics = SparseGTMetrics()
 ndcg = NDCG()
-monitor = Monitor(val_dataset, save_path=args.monitor_path)
 
 # If loading from checkpoint, adjust start epoch and load parameters.
 if args.load_pthpath == "":
 	start_epoch = 0
 else:
 	# "path/to/checkpoint_xx.pth" -> xx
-	start_epoch = int(args.load_pthpath.split("_")[-1][:-4]) + 1
+	start_epoch = int(args.load_pthpath.split("_")[-1][:-4])
 
 	model_state_dict, optimizer_state_dict = load_checkpoint(args.load_pthpath)
 	if isinstance(model, nn.DataParallel):
@@ -293,35 +253,22 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 		combined_dataloader = itertools.chain(train_dataloader)
 
 	print(f"\nTraining for epoch {epoch}:")
-
 	with tqdm(total=iterations) as pbar:
-		epoch_loss = torch.tensor(0.0)
-
-		torch.cuda.empty_cache()
-		for i, batch in enumerate(combined_dataloader):
+		for i, batch in enumerate(tqdm(combined_dataloader)):
 			for key in batch:
 				batch[key] = batch[key].to(device)
 
 			optimizer.zero_grad()
 			output = model(batch)
-
-			sparse_metrics.observe(output, batch["ans_ind"])
-
 			target = (
 				batch["ans_ind"]
 				if config["model"]["decoder"] == "disc"
 				else batch["ans_out"]
 			)
-
-			# compute loss
 			batch_loss = criterion(
 					output.view(-1, output.size(-1)), target.view(-1)
 					)
-
-			# compute gradients
 			batch_loss.backward()
-
-			# update params
 			optimizer.step()
 
 			summary_writer.add_scalar(
@@ -335,29 +282,12 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 			global_iteration_step += 1
 			torch.cuda.empty_cache()
 
-			pbar.set_postfix(batch_loss=batch_loss.item())
-			pbar.update(1)
-
 			experiment.log_metric('train/batch_loss', batch_loss.item())
-			epoch_loss += batch["ques"].size(0) * batch_loss.detach()
 
-		all_metrics = {}
-		all_metrics.update(sparse_metrics.retrieve(reset=True))
+			# update
+			pbar.update(1)
+			pbar.set_postfix(batch_loss=batch_loss.item())
 
-		for metric_name, metric_value in all_metrics.items():
-			print(f"{metric_name}: {metric_value}")
-			experiment.log_metric(f"train/{metric_name}", metric_value)
-
-		epoch_loss /= num_examples
-
-		summary_writer.add_scalars(
-				"train/metrics", all_metrics, global_iteration_step
-				)
-
-		summary_writer.add_scalar(
-				"train/epoch_loss", epoch_loss, i
-				)
-		experiment.log_metric('train/epoch_loss', epoch_loss.item())
 	# -------------------------------------------------------------------------
 	#   ON EPOCH END  (checkpointing and validation)
 	# -------------------------------------------------------------------------
@@ -369,50 +299,31 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 		# Switch dropout, batchnorm etc to the correct mode.
 		model.eval()
 
-		epoch_loss = torch.tensor(0.0)
 		print(f"\nValidation after epoch {epoch}:")
 		for i, batch in enumerate(tqdm(val_dataloader)):
 			for key in batch:
 				batch[key] = batch[key].to(device)
-
 			with torch.no_grad():
-				output, attn_weights = model(batch, debug=True)
-
+				output = model(batch)
+				# BS x 10 x 100, BS x 10
+				# print('val_loss', criterion(output.view(-1, 100), batch['ans_ind'].view(-1)))
 			sparse_metrics.observe(output, batch["ans_ind"])
-
-			monitor.update(batch['img_ids'].detach(),
-			               output.detach(),
-			               batch['ans_ind'].detach(),
-			               attn_weights.detach())
-
 			if "gt_relevance" in batch:
 				output = output[
 				         torch.arange(output.size(0)), batch["round_id"] - 1, :
 				         ]
 				ndcg.observe(output, batch["gt_relevance"])
 
-			epoch_loss += batch["ques"].size(0) * batch_loss.detach()
-
-		epoch_loss /= torch.tensor(len(val_dataset), dtype=torch.float)
-
-		monitor.export()
-
-		summary_writer.add_scalar(
-				"val/epoch_loss", epoch_loss, i
-				)
-		experiment.log_metric('val/epoch_loss', epoch_loss.item())
-
 		all_metrics = {}
 		all_metrics.update(sparse_metrics.retrieve(reset=True))
 		all_metrics.update(ndcg.retrieve(reset=True))
-
 		for metric_name, metric_value in all_metrics.items():
 			print(f"{metric_name}: {metric_value}")
 			experiment.log_metric(f"val/{metric_name}", metric_value)
 
 
 		summary_writer.add_scalars(
-				"val/metrics", all_metrics, global_iteration_step
+				"metrics", all_metrics, global_iteration_step
 				)
 
 		model.train()
