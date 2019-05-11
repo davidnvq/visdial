@@ -10,6 +10,10 @@
 #tensorboard --logdir . --port 8008
 #fw 8008 8008
 
+ROOT=/home/ubuntu
+DATASET=$ROOT/datasets/visdial
+CKPOINT=$ROOT/checkpoints/tmp
+
 CUDA_VISIBLE_DEVICES='0' python ../train.py \
 --validate \
 --overfit \

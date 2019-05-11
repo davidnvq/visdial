@@ -10,8 +10,8 @@ function download_file (){
         wget -O $1 $2
     fi
 }
-
-DATASET=/content/datasets
+ROOT=/content
+DATASET=$ROOT/datasets/visdial
 
 FILE[1]=$DATASET/features_faster_rcnn_x101_train.h5
 FILE[2]=$DATASET/features_faster_rcnn_x101_val.h5
@@ -34,7 +34,6 @@ LINK[7]='https://www.dropbox.com/s/3knyk09ko4xekmc/visdial_1.0_val_dense_annotat
 if [ ! -d $DATASET ]; then
     mkdir -p $DATASET
 fi
-
 
 # Download
 for i in {1..7}

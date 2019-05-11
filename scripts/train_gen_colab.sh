@@ -4,9 +4,11 @@
 bash download_data.sh
 
 COMET=test
-CONFIG=configs/attn_disc_faster_rcnn_x101.yml
-DATASET=/content/datasets
-CKPOINT=/content/checkpoints/tmp
+CONFIG=configs/attn_gen_faster_rcnn_x101.yml
+
+ROOT=/content
+DATASET=$ROOT/datasets/visdial
+CKPOINT=$ROOT/checkpoints/tmp
 
 FILE[1]=$DATASET/features_faster_rcnn_x101_train.h5
 FILE[2]=$DATASET/features_faster_rcnn_x101_val.h5
@@ -21,7 +23,7 @@ PATH_SAVE=$CKPOINT/
 PATH_MONI=$CKPOINT/monitor.pkl
 
 # Overfit
-python train.py \
+python /content/visdial/train.py \
 --validate \
 --overfit \
 --gpu-ids 0 \
