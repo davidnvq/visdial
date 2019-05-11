@@ -9,7 +9,6 @@ class LateFusionEncoder(nn.Module):
 	def __init__(self, config, vocabulary):
 		super().__init__()
 		self.config = config
-		self.is_bilstm = config['is_bilstm']
 
 		self.word_embed = nn.Embedding(
 				len(vocabulary),
@@ -22,7 +21,7 @@ class LateFusionEncoder(nn.Module):
 				config["lstm_num_layers"],
 				batch_first=True,
 				dropout=config["dropout"],
-				bidirectional=self.is_bilstm,
+				bidirectional=True,
 				)
 		self.ques_rnn = nn.LSTM(
 				config["word_embedding_size"],
@@ -30,15 +29,14 @@ class LateFusionEncoder(nn.Module):
 				config["lstm_num_layers"],
 				batch_first=True,
 				dropout=config["dropout"],
-				bidirectional=self.is_bilstm,
+				bidirectional=True,
 				)
 
-		if self.is_bilstm:
-			self.hist_linear = nn.Linear(config['lstm_hidden_size'] * 2,
-			                             config['lstm_hidden_size'])
+		self.hist_linear = nn.Linear(config['lstm_hidden_size'] * 2,
+		                             config['lstm_hidden_size'])
 
-			self.ques_linear = nn.Linear(config['lstm_hidden_size'] * 2,
-			                             config['lstm_hidden_size'])
+		self.ques_linear = nn.Linear(config['lstm_hidden_size'] * 2,
+		                             config['lstm_hidden_size'])
 		self.dropout = nn.Dropout(p=config["dropout"])
 
 		# questions and history are right padded sequences of variable length
@@ -107,26 +105,20 @@ class LateFusionEncoder(nn.Module):
 		_, (hist_embed, _) = self.hist_rnn(hist_embed, hist_len)
 
 
-		if self.is_bilstm:
-			# shape: [2, BS x NR, HS] <- select the last layer
-			ques_embed = ques_embed[-2:]
-			# shape: [BS x NR, HS x 2]
-			ques_embed = torch.cat([ques_embed[0], ques_embed[1]], dim=-1)
-			# shape: [BS x NR, HS]
-			ques_embed = self.ques_linear(ques_embed)
+		# shape: [2, BS x NR, HS] <- select the last layer
+		ques_embed = ques_embed[-2:]
+		# shape: [BS x NR, HS x 2]
+		ques_embed = torch.cat([ques_embed[0], ques_embed[1]], dim=-1)
+		# shape: [BS x NR, HS]
+		ques_embed = self.ques_linear(ques_embed)
 
-			# shape: [2, BS x NR, HS]
-			hist_embed = hist_embed[-2:]
-			# shape: [BS x NR, HS x 2]
-			hist_embed = torch.cat([hist_embed[0], hist_embed[1]], dim=-1)
-			# shape: [BS x NR, HS]
-			hist_embed = self.hist_linear(hist_embed)
+		# shape: [2, BS x NR, HS]
+		hist_embed = hist_embed[-2:]
+		# shape: [BS x NR, HS x 2]
+		hist_embed = torch.cat([hist_embed[0], hist_embed[1]], dim=-1)
+		# shape: [BS x NR, HS]
+		hist_embed = self.hist_linear(hist_embed)
 
-		if not self.is_bilstm:
-			# shape: [BS x NR, HS] <- select the last layer
-			ques_embed = ques_embed[-1]
-			# shape: [BS x NR, HS]
-			hist_embed = hist_embed[-1]
 
 		# project down image features and ready for attention
 		# shape: [BS, NP, HS]

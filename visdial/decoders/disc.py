@@ -8,7 +8,6 @@ class DiscriminativeDecoder(nn.Module):
 	def __init__(self, config, vocabulary):
 		super().__init__()
 		self.config = config
-		self.is_bilstm = self.config['is_bilstm']
 
 		self.word_embed = nn.Embedding(
 				len(vocabulary),
@@ -22,11 +21,10 @@ class DiscriminativeDecoder(nn.Module):
 				config["lstm_num_layers"],
 				batch_first=True,
 				dropout=config["dropout"],
-				bidirectional=self.is_bilstm
+				bidirectional=True
 				)
-		if self.is_bilstm:
-			self.option_linear = nn.Linear(config["lstm_hidden_size"] * 2,
-			                               config["lstm_hidden_size"])
+		self.option_linear = nn.Linear(config["lstm_hidden_size"] * 2,
+		                               config["lstm_hidden_size"])
 
 		# Options are variable length padded sequences, use DynamicRNN.
 		self.option_rnn = DynamicRNN(self.option_rnn)
@@ -75,17 +73,13 @@ class DiscriminativeDecoder(nn.Module):
 		_, (nonzero_options_embed, _) = self.option_rnn(
 				nonzero_options_embed, nonzero_options_length
 				)
-		if not self.is_bilstm:
-			# shape: [BS x NR x NO, HS]
-			nonzero_options_embed = nonzero_options_embed[-1]
 
-		if self.is_bilstm:
-			# shape: [2, BS x NR x NO, HS]
-			nonzero_options_embed = nonzero_options_embed[-2:]
-			# shape: [BS x NR x NO, HS x 2]
-			nonzero_options_embed = torch.cat([nonzero_options_embed[0], nonzero_options_embed[1]], dim=-1)
-			# shape: [BS x NR x NO, HS]
-			nonzero_options_embed = self.option_linear(nonzero_options_embed)
+		# shape: [2, BS x NR x NO, HS]
+		nonzero_options_embed = nonzero_options_embed[-2:]
+		# shape: [BS x NR x NO, HS x 2]
+		nonzero_options_embed = torch.cat([nonzero_options_embed[0], nonzero_options_embed[1]], dim=-1)
+		# shape: [BS x NR x NO, HS]
+		nonzero_options_embed = self.option_linear(nonzero_options_embed)
 
 		# shape: [BS x NR x NO, HS] <- move back to standard for TEST split
 		options_embed = torch.zeros(BS * NR * NO, HS, device=options.device)

@@ -190,7 +190,6 @@ class AttentionEncoder(nn.Module):
 	def __init__(self, config, vocabulary):
 		super().__init__()
 		self.config = config
-		self.is_bilstm = config['is_bilstm']
 		WE = config["word_embedding_size"]
 		HS = config["lstm_hidden_size"]
 		num_lstm_layers = config["lstm_num_layers"]
