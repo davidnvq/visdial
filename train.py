@@ -223,7 +223,7 @@ train_dataset = val_dataset
 train_dataloader = val_dataloader
 
 # Pass vocabulary to construct Embedding layer.
-encoder = AttentionEncoder(config["model"], train_dataset.vocabulary)
+encoder = Encoder(config["model"], train_dataset.vocabulary)
 decoder = Decoder(config["model"], train_dataset.vocabulary)
 
 print("Encoder: {}".format(config["model"]["encoder"]))

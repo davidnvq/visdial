@@ -10,7 +10,7 @@ CKPOINT=$ROOT/checkpoints/tmp
 PATH_PROJ=$ROOT/visdial
 
 COMET=test
-CONFIG=$PATH_PROJ/configs/attn_gen_faster_rcnn_x101.yml
+CONFIG=$PATH_PROJ/configs/attn_disc_faster_rcnn_x101.yml
 
 
 FILE[1]=$DATASET/features_faster_rcnn_x101_train.h5
