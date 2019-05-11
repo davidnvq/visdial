@@ -184,20 +184,20 @@ is_abtoks = True if config["model"]["decoder"] != "disc" else False
 is_return = True if config["model"]["decoder"] == "disc" else False
 
 # TODO: Comment this overfit test
-# train_dataset = VisDialDataset(
-# 		config["dataset"],
-# 		args.json_train,
-# 		overfit=args.overfit,
-# 		in_memory=args.in_memory,
-# 		return_options=is_return,
-# 		add_boundary_toks=is_abtoks,
-# 		)
-# train_dataloader = DataLoader(
-# 		train_dataset,
-# 		batch_size=config["solver"]["batch_size"],
-# 		num_workers=args.cpu_workers,
-# 		shuffle=True,
-# 		)
+train_dataset = VisDialDataset(
+		config["dataset"],
+		args.json_train,
+		overfit=args.overfit,
+		in_memory=args.in_memory,
+		return_options=is_return,
+		add_boundary_toks=is_abtoks,
+		)
+train_dataloader = DataLoader(
+		train_dataset,
+		batch_size=config["solver"]["batch_size"],
+		num_workers=args.cpu_workers,
+		shuffle=True,
+		)
 
 val_dataset = VisDialDataset(
 		config["dataset"],
@@ -219,8 +219,8 @@ val_dataloader = DataLoader(
 		)
 
 # # TODO: Uncomment this overfit test
-train_dataset = val_dataset
-train_dataloader = val_dataloader
+# train_dataset = val_dataset
+# train_dataloader = val_dataloader
 
 # Pass vocabulary to construct Embedding layer.
 encoder = Encoder(config["model"], train_dataset.vocabulary)
