@@ -39,18 +39,11 @@ class VisDialDataset(Dataset):
 		self.return_options = return_options
 		self.add_boundary_toks = add_boundary_toks
 		self.dialogs_reader = DialogsReader(jsonpath_dialogs)
-		print("done loading dialogs reader!")
-
 		self.annotations_reader = None if jsonpath_dense_annotations is None else \
 			DenseAnnotationsReader(jsonpath_dense_annotations)
-		print("done loading dense reader!")
-
 		self.vocabulary = Vocabulary(jsonpath_vocab_dict, config["vocab_min_count"])
-		print("done loading vocab")
-
 		self.hdf_reader = ImageFeaturesHdfReader(hdfpath_img_features)
 
-		print("done loading image reader!")
 		# Keep a list of image_ids as primary keys to access data.
 		self.image_ids = list(self.dialogs_reader.dialogs.keys())
 

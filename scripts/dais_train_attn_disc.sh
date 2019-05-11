@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # To run:
-# cd /content/visdial/scripts; cp train_gen_colab.sh train_gen_colab_`date +%d%b%Y`.sh; bash train_gen_colab_`date +%d%b%Y`.sh
+
 COMET=test
 CONFIG=configs/attn_disc_faster_rcnn_x101.yml
 
@@ -17,7 +17,7 @@ FILE[5]=$DATASET/visdial_1.0_train.json
 FILE[6]=$DATASET/visdial_1.0_val.json
 FILE[7]=$DATASET/visdial_1.0_val_dense_annotations.json
 
-PATH_LOAD="''"
+PATH_LOAD=$CKPOINT/
 PATH_SAVE=$CKPOINT/
 PATH_MONI=$CKPOINT/monitor.pkl
 PATH_PROJ=$ROOT/visdial
