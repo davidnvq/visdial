@@ -5,6 +5,11 @@ from torch.nn.functional import normalize
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 
+# image_features_train_h5: '~/datasets/visdial/data/features_faster_rcnn_x101_train.h5'
+# image_features_val_h5: '~/datasets/visdial/data/features_faster_rcnn_x101_val.h5'
+# image_features_test_h5: '~/datasets/visdial/data/features_faster_rcnn_x101_test.h5'
+# word_counts_json: '~/datasets/visdial/data/visdial_1.0_word_counts_train.json'
+
 from visdial.data.readers import (
     DialogsReader,
     DenseAnnotationsReader,

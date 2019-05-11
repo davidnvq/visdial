@@ -40,12 +40,12 @@ parser.add_argument(
 		help="Path to a config file listing reader, model and solver parameters.",
 		)
 parser.add_argument(
-		"--train-json",
+		"--json-train",
 		default="data/visdial_1.0_train.json",
 		help="Path to json file containing VisDial v1.0 training data.",
 		)
 parser.add_argument(
-		"--val-json",
+		"--json-val",
 		default="data/visdial_1.0_val.json",
 		help="Path to json file containing VisDial v1.0 validation data.",
 		)
@@ -58,7 +58,7 @@ parser.add_argument(
 		)
 
 parser.add_argument(
-		"--val-dense-json",
+		"--json-val-dense",
 		default="data/visdial_1.0_val_dense_annotations.json",
 		help="Path to json file containing VisDial v1.0 validation dense ground "
 		     "truth annotations.",
@@ -92,8 +92,6 @@ parser.add_argument(
 parser.add_argument(
 		"--in-memory",
 		action="store_true",
-		help="Load the whole dataset and pre-extracted image features in memory. "
-		     "Use only in presence of large RAM, atleast few tens of GBs.",
 		)
 
 parser.add_argument_group("Checkpointing related arguments")
@@ -109,12 +107,13 @@ parser.add_argument(
 		help="Path of directory to create checkpoint directory and save "
 		     "checkpoints.",
 		)
-
-parser.add_argument(
-		"--load-pthpath",
-		default="",
+parser.add_argument("--load-pthpath",
 		help="To continue training, path to .pth file of saved checkpoint.",
 		)
+parser.add_argument("--image-features-tr-h5",default="")
+parser.add_argument("--image-features-va-h5", default="")
+parser.add_argument("--image-features-te-h5", default="")
+parser.add_argument("--json-word-counts", default="")
 
 # =============================================================================
 #   INPUT ARGUMENTS AND CONFIG
@@ -124,6 +123,12 @@ args = parser.parse_args()
 
 # keys: {"dataset", "model", "solver"}
 config = yaml.load(open(args.config_yml))
+
+config['dataset']['image_features_train_h5'] = args.image_features_tr_h5
+config['dataset']['image_features_val_h5']   = args.image_features_va_h5
+config['dataset']['image_features_test_h5']  = args.image_features_te_h5
+config['dataset']['word_counts_json'] = args.json_word_counts
+
 
 if isinstance(args.gpu_ids, int):
 	args.gpu_ids = [args.gpu_ids]
@@ -263,10 +268,7 @@ optimizer = optim.Adam(model.parameters(), lr=args.lr)
 #   SETUP BEFORE TRAINING LOOP
 # =============================================================================
 summary_writer = SummaryWriter(log_dir=args.save_dirpath)
-checkpoint_manager = CheckpointManager(
-		model, optimizer, args.save_dirpath, config=config
-		)
-
+checkpoint_manager = CheckpointManager(model, optimizer, args.save_dirpath, config=config)
 sparse_metrics = SparseGTMetrics()
 ndcg = NDCG()
 monitor = Monitor(val_dataset, save_path=args.monitor_path)
@@ -289,12 +291,14 @@ else:
 # =============================================================================
 #   TRAINING LOOP
 # =============================================================================
-
 # Forever increasing counter to keep track of iterations (for tensorboard log).
 global_iteration_step = start_epoch * iterations
 
-for epoch in range(start_epoch, config["solver"]["num_epochs"]):
+def move_to_cuda(batch, device):
+	for key in batch:
+		batch[key] = batch[key].to(device)
 
+for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 	# -------------------------------------------------------------------------
 	#   ON EPOCH START  (combine dataloaders if training on train + val)
 	# -------------------------------------------------------------------------
@@ -308,27 +312,24 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 	with tqdm(total=iterations) as pbar:
 		epoch_loss = torch.tensor(0.0)
 
-		torch.cuda.empty_cache()
 		for i, batch in enumerate(combined_dataloader):
-			for key in batch:
-				batch[key] = batch[key].to(device)
+			move_to_cuda(batch, device)
 
+			# zero grad
 			optimizer.zero_grad()
+
+			# do forward
 			output = model(batch)
 
+			# get target
 			if config["model"]["decoder"] == "disc":
-				sparse_metrics.observe(output, batch["ans_ind"])
-
-			target = (
-				batch["ans_ind"]
-				if config["model"]["decoder"] == "disc"
-				else batch["ans_out"]
-			)
+				target = batch['ans_ind']
+				sparse_metrics.observe(output, target)
+			else:
+				target = batch["ans_out"]
 
 			# compute loss
-			batch_loss = criterion(
-					output.view(-1, output.size(-1)), target.view(-1)
-					)
+			batch_loss = criterion(output.view(-1, output.size(-1)), target.view(-1))
 
 			# compute gradients
 			batch_loss.backward()
@@ -336,21 +337,17 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 			# update params
 			optimizer.step()
 
-			summary_writer.add_scalar(
-					"train/loss", batch_loss, global_iteration_step
-					)
-			summary_writer.add_scalar(
-					"train/lr", optimizer.param_groups[0]["lr"], global_iteration_step
-					)
-
-			# scheduler.step(global_iteration_step)
-			global_iteration_step += 1
-			torch.cuda.empty_cache()
-
 			pbar.set_postfix(epoch=epoch, batch_loss=batch_loss.item())
 			pbar.update(1)
 
 			experiment.log_metric('train/batch_loss', batch_loss.item())
+			summary_writer.add_scalar("train/batch_loss", batch_loss, global_iteration_step)
+			summary_writer.add_scalar("train/lr", optimizer.param_groups[0]["lr"], global_iteration_step)
+
+			global_iteration_step += 1
+			torch.cuda.empty_cache()
+
+
 			epoch_loss += batch["ques"].size(0) * batch_loss.detach()
 
 		if config["model"]["decoder"] == "disc":
@@ -361,18 +358,14 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 				print('')
 				print(f"{metric_name}: {metric_value}")
 				experiment.log_metric(f"train/{metric_name}", metric_value)
-			summary_writer.add_scalars(
-					"train/metrics", all_metrics, global_iteration_step
-					)
 
+			summary_writer.add_scalars("train/metrics", all_metrics, global_iteration_step)
 
 		epoch_loss /= num_examples
 
-
-		summary_writer.add_scalar(
-				"train/epoch_loss", epoch_loss, i
-				)
+		summary_writer.add_scalar("train/epoch_loss", epoch_loss, i)
 		experiment.log_metric('train/epoch_loss', epoch_loss.item())
+
 	# -------------------------------------------------------------------------
 	#   ON EPOCH END  (checkpointing and validation)
 	# -------------------------------------------------------------------------
@@ -385,28 +378,24 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 		model.eval()
 
 		epoch_loss = torch.tensor(0.0)
+
 		print(f"\nValidation after epoch {epoch}:")
+
 		for i, batch in enumerate(tqdm(val_dataloader)):
-			for key in batch:
-				batch[key] = batch[key].to(device)
+
+			move_to_cuda(batch, device)
 
 			with torch.no_grad():
 				output = model(batch)
+				sparse_metrics.observe(output, batch["ans_ind"])
 
-			sparse_metrics.observe(output, batch["ans_ind"])
+				if "gt_relevance" in batch:
+					output = output[:, batch["round_id"] - 1, :]
+					ndcg.observe(output, batch["gt_relevance"])
+					monitor.update(batch['img_ids'], output, batch['ans_ind'])
 
-			monitor.update(batch['img_ids'].detach(),
-			               output.detach(),
-			               batch['ans_ind'].detach(),
-			               )
-
-			if "gt_relevance" in batch:
-				output = output[
-				         torch.arange(output.size(0)), batch["round_id"] - 1, :
-				         ]
-				ndcg.observe(output, batch["gt_relevance"])
-
-		monitor.export()
+		if 'gt_relevance' in batch:
+			monitor.export()
 
 		all_metrics = {}
 		all_metrics.update(sparse_metrics.retrieve(reset=True))
@@ -416,10 +405,7 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 			print(f"{metric_name}: {metric_value}")
 			experiment.log_metric(f"val/{metric_name}", metric_value)
 
-
-		summary_writer.add_scalars(
-				"val/metrics", all_metrics, global_iteration_step
-				)
+		summary_writer.add_scalars("val/metrics", all_metrics, global_iteration_step)
 
 		model.train()
 		torch.cuda.empty_cache()

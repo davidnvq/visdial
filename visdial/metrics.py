@@ -282,6 +282,9 @@ class Monitor(object):
 
 
 	def update(self, batch_img_ids, batch_logits, batch_targets, attn_weights=None):
+		batch_img_ids = batch_img_ids.cpu()
+		batch_logits = batch_logits.cpu()
+		batch_targets = batch_targets.cpu()
 
 		batch_output = torch.softmax(batch_logits, dim=-1)
 		if attn_weights is None:
