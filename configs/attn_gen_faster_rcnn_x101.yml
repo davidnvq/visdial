@@ -15,12 +15,8 @@ model:
   lstm_hidden_size: 512
   lstm_num_layers: 2
   dropout: 0.2
-  is_bilstm: true
   num_attns: 2
 
 # Optimization related arguments
 solver:
-  batch_size: 8 # 32 x num_gpus is a good rule of thumb
-  num_epochs: 10
-  initial_lr: 1e-3         # overfit: should changed to 1e-3 rather than 1e-2
   training_splits: "train"  # "trainval"
