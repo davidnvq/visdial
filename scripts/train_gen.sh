@@ -40,4 +40,3 @@ python $PATH_PROJ/train.py \
 --json-val-dense ${FILE[7]} \
 --monitor-path $PATH_MONI \
 --save-dirpath $PATH_SAVE \
---load-pthpath $PATH_LOAD
