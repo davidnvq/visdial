@@ -35,7 +35,7 @@ MANIFEST
 
 # Datasets, pretrained models, checkpoints and preprocessed files
 data/
-!visdialch/data/
+!visdial/data/
 checkpoints/
 logs/
 .idea
