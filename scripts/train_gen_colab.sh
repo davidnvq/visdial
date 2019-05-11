@@ -3,12 +3,13 @@
 # cd /content/visdial/scripts; cp train_gen_colab.sh train_gen_colab_`date +%d%b%Y`.sh; bash train_gen_colab_`date +%d%b%Y`.sh
 bash download_data.sh
 
-COMET=test
-CONFIG=configs/attn_gen_faster_rcnn_x101.yml
-
-ROOT=/content
+ROOT=/home/ubuntu
 DATASET=$ROOT/datasets/visdial
 CKPOINT=$ROOT/checkpoints/tmp
+PATH_PROJ=$ROOT/visdial
+
+COMET=test
+CONFIG=$PATH_PROJ/configs/attn_gen_faster_rcnn_x101.yml
 
 FILE[1]=$DATASET/features_faster_rcnn_x101_train.h5
 FILE[2]=$DATASET/features_faster_rcnn_x101_val.h5
