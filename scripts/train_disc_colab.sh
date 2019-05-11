@@ -3,12 +3,14 @@
 # cd /content/visdial/scripts; cp train_disc.sh train_disc_`date +%d%b%Y`.sh; bash train_disc_`date +%d%b%Y`.sh
 
 bash download_data.sh
-COMET=test
-CONFIG=configs/attn_disc_faster_rcnn_x101.yml
 
-ROOT=/content
+ROOT=/home/ubuntu
 DATASET=$ROOT/datasets/visdial
 CKPOINT=$ROOT/checkpoints/tmp
+PATH_PROJ=$ROOT/visdial
+
+COMET=test
+CONFIG=$PATH_PROJ/configs/attn_gen_faster_rcnn_x101.yml
 
 
 FILE[1]=$DATASET/features_faster_rcnn_x101_train.h5
