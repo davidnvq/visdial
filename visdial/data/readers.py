@@ -213,6 +213,7 @@ class ImageFeaturesHdfReader(object):
     """
 
     def __init__(self, features_hdfpath: str, in_memory: bool = False):
+
         if '~' in features_hdfpath:
             features_hdfpath = os.path.expanduser(features_hdfpath)
 
@@ -231,19 +232,9 @@ class ImageFeaturesHdfReader(object):
 
     def __getitem__(self, image_id: int):
         index = self.image_id_list.index(image_id)
-        if self._in_memory:
-            # Load features during first epoch, all not loaded together as it
-            # has a slow start.
-            if self.features[index] is not None:
-                image_id_features = self.features[index]
-            else:
-                with h5py.File(self.features_hdfpath, "r") as features_hdf:
-                    image_id_features = features_hdf["features"][index]
-                    self.features[index] = image_id_features
-        else:
-            # Read chunk from file everytime if not loaded in memory.
-            with h5py.File(self.features_hdfpath, "r") as features_hdf:
-                image_id_features = features_hdf["features"][index]
+        # Read chunk from file everytime if not loaded in memory.
+        with h5py.File(self.features_hdfpath, "r") as features_hdf:
+            image_id_features = features_hdf["features"][index]
 
         return image_id_features
 
