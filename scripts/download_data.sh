@@ -44,7 +44,7 @@ do
 done
 
 # Unzip
-for i in {5..6}
+for i in {8..9}
 do
     if [ -f ${FILE[i]} ]; then
         unzip ${FILE[i]} -d $DATASET
