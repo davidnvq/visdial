@@ -34,4 +34,4 @@ CUDA_VISIBLE_DEVICES='1' python train.py \
 --train-json '/home/ubuntu/datasets/visdial/data/visdial_1.0_train.json' \
 --val-dense-json '/home/ubuntu/datasets/visdial/data/visdial_1.0_val_dense_annotations.json' \
 --save-dirpath '/home/ubuntu/datasets/visdial/checkpoints/attn_gen' \
---load-pthpath ''
+--load-pthpath '/home/ubuntu/datasets/visdial/checkpoints/attn_gen/checkpoint_9.pth'

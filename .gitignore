@@ -12,6 +12,7 @@ __pycache__/
 *.so
 
 
+
 # Distribution / packaging
 .Python
 build/
@@ -38,6 +39,8 @@ data/
 checkpoints/
 logs/
 .idea
+.DS_Store
+
 
 # IPython Notebook
 .ipynb_checkpoints
