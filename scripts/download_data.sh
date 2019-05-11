@@ -37,7 +37,7 @@ fi
 
 
 # Download
-for i in {1..20}
+for i in {1..7}
 do
     download_file ${FILE[$i]} ${LINK[$i]}
 done
