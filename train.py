@@ -391,7 +391,7 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 				sparse_metrics.observe(output, batch["ans_ind"])
 
 				if "gt_relevance" in batch:
-					output = output[:, batch["round_id"] - 1, :]
+					output = output[torch.arange(output.size(0)), batch["round_id"] - 1, :]
 					ndcg.observe(output, batch["gt_relevance"])
 					monitor.update(batch['img_ids'], output, batch['ans_ind'])
 

@@ -4,6 +4,8 @@
 
 bash download_data.sh
 
+echo -e "\nSTART TRAINING....\n"
+
 ROOT=/content
 DATASET=$ROOT/datasets/visdial
 CKPOINT=$ROOT/checkpoints/tmp
