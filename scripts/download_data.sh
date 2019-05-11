@@ -2,7 +2,6 @@
 
 
 function download_file (){
-    echo $1
     if [ -f $1 ]; then
         echo "The file '$1' exists. No need to download :3"
     else
