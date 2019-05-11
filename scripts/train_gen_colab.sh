@@ -3,6 +3,8 @@
 # cd /content/visdial/scripts; cp train_gen_colab.sh train_gen_colab_`date +%d%b%Y`.sh; bash train_gen_colab_`date +%d%b%Y`.sh
 bash download_data.sh
 
+echo -e "\nSTART TRAINING....\n"
+
 ROOT=/content
 DATASET=$ROOT/datasets/visdial
 CKPOINT=$ROOT/checkpoints/tmp

@@ -31,11 +31,11 @@ class EncoderDecoderModel(nn.Module):
         self.encoder = encoder
         self.decoder = decoder
 
-        if is_bilstm:
-            if self.decoder.config['decoder'] == 'disc':
-                update_weights(self, DIS_PATH)
-            if self.decoder.config['decoder'] == 'gen':
-                update_weights(self, GEN_PATH)
+        # if is_bilstm:
+        #     if self.decoder.config['decoder'] == 'disc':
+        #         update_weights(self, DIS_PATH)
+        #     if self.decoder.config['decoder'] == 'gen':
+        #         update_weights(self, GEN_PATH)
 
 
     def forward(self, batch, debug=False):
