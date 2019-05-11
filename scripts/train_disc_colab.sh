@@ -4,7 +4,7 @@
 
 bash download_data.sh
 
-ROOT=/home/ubuntu
+ROOT=/content
 DATASET=$ROOT/datasets/visdial
 CKPOINT=$ROOT/checkpoints/tmp
 PATH_PROJ=$ROOT/visdial
