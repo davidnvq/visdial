@@ -46,7 +46,9 @@ class VisDialDataset(Dataset):
 		print("done loading dense reader!")
 
 		self.vocabulary = Vocabulary(jsonpath_vocab_dict, config["vocab_min_count"])
-		self.hdf_reader = ImageFeaturesHdfReader(hdfpath_img_features)
+		print("done loading vocab")
+
+		# self.hdf_reader = ImageFeaturesHdfReader(hdfpath_img_features)
 		print("done loading image reader!")
 
 		# Keep a list of image_ids as primary keys to access data.
