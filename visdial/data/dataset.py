@@ -25,9 +25,9 @@ class VisDialDataset(Dataset):
 	def __init__(
 			self,
 			config,
-			jsonpath_dialogs,
-			jsonpath_vocab_dict,
-			hdfpath_img_features,
+			jsonpath_dialogs=None,
+			jsonpath_vocab_dict=None,
+			hdfpath_img_features=None,
 			overfit: bool = False,
 			return_options: bool = True,
 			add_boundary_toks: bool = False,

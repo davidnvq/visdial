@@ -21,11 +21,11 @@ NUM_EPOCHS=10
 CONFIG=$PATH_PROJ/configs/attn_disc_faster_rcnn_x101.yml
 
 
-FILE[1]=$DATASET/features_faster_rcnn_x101_val.h5
+FILE[1]=$DATASET/features_faster_rcnn_x101_train.h5
 FILE[2]=$DATASET/features_faster_rcnn_x101_val.h5
 FILE[3]=$DATASET/features_faster_rcnn_x101_test.h5
 FILE[4]=$DATASET/visdial_1.0_word_counts_train.json
-FILE[5]=$DATASET/visdial_1.0_val.json
+FILE[5]=$DATASET/visdial_1.0_train.json
 FILE[6]=$DATASET/visdial_1.0_val.json
 FILE[7]=$DATASET/visdial_1.0_val_dense_annotations.json
 

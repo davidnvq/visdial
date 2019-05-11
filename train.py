@@ -109,9 +109,9 @@ is_return = True if config["model"]["decoder"] == "disc" else False
 
 train_dataset = VisDialDataset(
 		config["dataset"],
-		args.json_train,
-		args.image_features_tr_h5,
-		args.json_word_counts,
+		jsonpath_dialogs=args.json_train,
+		hdfpath_img_features=args.image_features_tr_h5,
+		jsonpath_vocab_dict=args.json_word_counts,
 		overfit=args.overfit,
 		return_options=is_return,
 		add_boundary_toks=is_abtoks,
@@ -126,14 +126,13 @@ train_dataloader = DataLoader(
 
 val_dataset = VisDialDataset(
 		config["dataset"],
-		args.json_val,
-		args.image_features_va_h5,
-		args.json_word_counts,
-		args.json_val_dense,
+		jsonpath_dialogs=args.json_val,
+		jsonpath_vocab_dict=args.json_word_counts,
+		jsonpath_dense_annotations=args.json_val_dense,
+		hdfpath_img_features=args.image_features_va_h5,
 		overfit=args.overfit,
 		return_options=True,
 		add_boundary_toks=is_abtoks,
-		jsonpath_dense_annotations=args.json_val_dense
 		)
 
 val_dataloader = DataLoader(
