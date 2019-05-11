@@ -20,6 +20,8 @@ FILE[4]=$DATASET/visdial_1.0_word_counts_train.json
 FILE[5]=$DATASET/visdial_1.0_train.zip
 FILE[6]=$DATASET/visdial_1.0_val.zip
 FILE[7]=$DATASET/visdial_1.0_val_dense_annotations.json
+FILE[8]=$DATASET/visdial_1.0_val.json
+FILE[9]=$DATASET/visdial_1.0_train.json
 
 LINK[1]='https://s3.amazonaws.com/visual-dialog/data/v1.0/2019/features_faster_rcnn_x101_train.h5'
 LINK[2]='https://s3.amazonaws.com/visual-dialog/data/v1.0/2019/features_faster_rcnn_x101_val.h5'
