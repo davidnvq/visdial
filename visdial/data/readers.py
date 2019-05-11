@@ -212,27 +212,19 @@ class ImageFeaturesHdfReader(object):
         RAM - trade-off between speed and memory.
     """
 
-    def __init__(self, features_hdfpath: str, in_memory: bool = False):
-
-        if '~' in features_hdfpath:
-            features_hdfpath = os.path.expanduser(features_hdfpath)
+    def __init__(self, features_hdfpath):
 
         self.features_hdfpath = features_hdfpath
-        self._in_memory = in_memory
 
         with h5py.File(self.features_hdfpath, "r") as features_hdf:
             self._split = features_hdf.attrs["split"]
             self.image_id_list = list(features_hdf["image_id"])
-            # "features" is List[np.ndarray] if the dataset is loaded in-memory
-            # If not loaded in memory, then list of None.
-            self.features = [None] * len(self.image_id_list)
 
     def __len__(self):
         return len(self.image_id_list)
 
     def __getitem__(self, image_id: int):
         index = self.image_id_list.index(image_id)
-        # Read chunk from file everytime if not loaded in memory.
         with h5py.File(self.features_hdfpath, "r") as features_hdf:
             image_id_features = features_hdf["features"][index]
 
