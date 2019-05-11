@@ -19,7 +19,7 @@ FILE[5]=$DATASET/visdial_1.0_train.json
 FILE[6]=$DATASET/visdial_1.0_val.json
 FILE[7]=$DATASET/visdial_1.0_val_dense_annotations.json
 
-PATH_LOAD=''
+PATH_LOAD="''"
 PATH_SAVE=$CKPOINT/
 PATH_MONI=$CKPOINT/monitor.pkl
 PATH_PROJ=$ROOT/visdial
