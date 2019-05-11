@@ -271,7 +271,8 @@ summary_writer = SummaryWriter(log_dir=args.save_dirpath)
 checkpoint_manager = CheckpointManager(model, optimizer, args.save_dirpath, config=config)
 sparse_metrics = SparseGTMetrics()
 ndcg = NDCG()
-monitor = Monitor(val_dataset, save_path=args.monitor_path)
+
+# monitor = Monitor(val_dataset, save_path=args.monitor_path)
 
 # If loading from checkpoint, adjust start epoch and load parameters.
 start_epoch = 0
@@ -393,10 +394,10 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 				if "gt_relevance" in batch:
 					output = output[torch.arange(output.size(0)), batch["round_id"] - 1, :]
 					ndcg.observe(output, batch["gt_relevance"])
-					monitor.update(batch['img_ids'], output, batch['ans_ind'])
+					# monitor.update(batch['img_ids'], output, batch['ans_ind'])
 
-		if 'gt_relevance' in batch:
-			monitor.export()
+		# if 'gt_relevance' in batch:
+		# 	monitor.export()
 
 		all_metrics = {}
 		all_metrics.update(sparse_metrics.retrieve(reset=True))
