@@ -107,22 +107,22 @@ is_return = True if config["model"]["decoder"] == "disc" else False
 
 # TODO: Comment this overfit test
 
-train_dataset = VisDialDataset(
-		config["dataset"],
-		jsonpath_dialogs=args.json_train,
-		hdfpath_img_features=args.image_features_tr_h5,
-		jsonpath_vocab_dict=args.json_word_counts,
-		overfit=args.overfit,
-		return_options=is_return,
-		add_boundary_toks=is_abtoks,
-		)
-
-train_dataloader = DataLoader(
-		train_dataset,
-		batch_size=args.batch_size,
-		num_workers=args.cpu_workers,
-		shuffle=True,
-		)
+# train_dataset = VisDialDataset(
+# 		config["dataset"],
+# 		jsonpath_dialogs=args.json_train,
+# 		hdfpath_img_features=args.image_features_tr_h5,
+# 		jsonpath_vocab_dict=args.json_word_counts,
+# 		overfit=args.overfit,
+# 		return_options=is_return,
+# 		add_boundary_toks=is_abtoks,
+# 		)
+#
+# train_dataloader = DataLoader(
+# 		train_dataset,
+# 		batch_size=args.batch_size,
+# 		num_workers=args.cpu_workers,
+# 		shuffle=True,
+# 		)
 
 val_dataset = VisDialDataset(
 		config["dataset"],
@@ -145,8 +145,8 @@ val_dataloader = DataLoader(
 		)
 
 # # TODO: Uncomment this overfit test
-# train_dataset = val_dataset
-# train_dataloader = val_dataloader
+train_dataset = val_dataset
+train_dataloader = val_dataloader
 
 # Pass vocabulary to construct Embedding layer.
 print("Encoder: {}".format(config["model"]["encoder"]))
@@ -293,7 +293,8 @@ for epoch in range(start_epoch, args.num_epochs):
 	# -------------------------------------------------------------------------
 	#   ON EPOCH END  (checkpointing and validation)
 	# -------------------------------------------------------------------------
-	checkpoint_manager.step(epoch=epoch)
+	if (epoch + 1) % 5 == 0:
+		checkpoint_manager.step(epoch=epoch)
 
 	# Validate and report automatic metrics.
 	if args.validate:
