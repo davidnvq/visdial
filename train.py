@@ -186,7 +186,7 @@ is_return = True if config["model"]["decoder"] == "disc" else False
 # TODO: Comment this overfit test
 train_dataset = VisDialDataset(
 		config["dataset"],
-		args.train_json,
+		args.json_train,
 		overfit=args.overfit,
 		in_memory=args.in_memory,
 		return_options=is_return,
@@ -201,8 +201,8 @@ train_dataloader = DataLoader(
 
 val_dataset = VisDialDataset(
 		config["dataset"],
-		args.val_json,
-		args.val_dense_json,
+		args.json_val,
+		args.json_val_dense,
 		overfit=args.overfit,
 		in_memory=args.in_memory,
 		return_options=True,
