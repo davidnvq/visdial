@@ -27,7 +27,7 @@ LINK[3]='https://s3.amazonaws.com/visual-dialog/data/v1.0/2019/features_faster_r
 LINK[4]='https://s3.amazonaws.com/visual-dialog/data/v1.0/2019/visdial_1.0_word_counts_train.json'
 LINK[5]='https://www.dropbox.com/s/ix8keeudqrd8hn8/visdial_1.0_train.zip?dl=0'
 LINK[6]='https://www.dropbox.com/s/ibs3a0zhw74zisc/visdial_1.0_val.zip?dl=0'
-LINK[7]='https://www.dropbox.com/s/3knyk09ko4xekmc/visdial_1.0_val_dense_annotations.json\?dl=0'
+LINK[7]='https://www.dropbox.com/s/3knyk09ko4xekmc/visdial_1.0_val_dense_annotations.json?dl=0'
 
 
 # check directories
@@ -46,7 +46,7 @@ done
 for i in {5..6}
 do
     if [ -f ${FILE[i]} ]; then
-        unzip ${FILE[i]}
+        unzip ${FILE[i]} -d $DATASET
         rm ${FILE[$i]}
     fi
 done
