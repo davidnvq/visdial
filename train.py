@@ -23,97 +23,27 @@ from visdial.metrics import SparseGTMetrics, NDCG, Monitor
 from visdial.utils.checkpointing import CheckpointManager, load_checkpoint
 
 parser = argparse.ArgumentParser()
-parser.add_argument(
-		"--seed",
-		type=int,
-		default=0,
-		help="For reproducibility",
-		)
-parser.add_argument(
-		"--config-yml",
-		default="configs/lf_disc_faster_rcnn_x101.yml",
-		help="Path to a config file listing reader, model and solver parameters.",
-		)
-parser.add_argument(
-		"--comet-name",
-		default="test",
-		help="Path to a config file listing reader, model and solver parameters.",
-		)
-parser.add_argument(
-		"--json-train",
-		default="data/visdial_1.0_train.json",
-		help="Path to json file containing VisDial v1.0 training data.",
-		)
-parser.add_argument(
-		"--json-val",
-		default="data/visdial_1.0_val.json",
-		help="Path to json file containing VisDial v1.0 validation data.",
-		)
-
-parser.add_argument(
-		"--lr",
-		default=1e-3,
-		type=float,
-		help="lr",
-		)
-
-parser.add_argument(
-		"--json-val-dense",
-		default="data/visdial_1.0_val_dense_annotations.json",
-		help="Path to json file containing VisDial v1.0 validation dense ground "
-		     "truth annotations.",
-		)
-parser.add_argument_group(
-		"Arguments independent of experiment reproducibility"
-		)
-parser.add_argument(
-		"--gpu-ids",
-		nargs="+",
-		type=int,
-		default=0,
-		help="List of ids of GPUs to use.",
-		)
-parser.add_argument(
-		"--cpu-workers",
-		type=int,
-		default=4,
-		help="Number of CPU workers for dataloader.",
-		)
-parser.add_argument(
-		"--overfit",
-		action="store_true",
-		help="Overfit model on 5 examples, meant for debugging.",
-		)
-parser.add_argument(
-		"--validate",
-		action="store_true",
-		help="Whether to validate on val split after every epoch.",
-		)
-parser.add_argument(
-		"--in-memory",
-		action="store_true",
-		)
-
-parser.add_argument_group("Checkpointing related arguments")
-parser.add_argument(
-		"--save-dirpath",
-		default="checkpoints/",
-		help="Path of directory to create checkpoint directory and save "
-		     "checkpoints.",
-		)
-parser.add_argument(
-		"--monitor-path",
-		default="data/lf_disc_val.pkl",
-		help="Path of directory to create checkpoint directory and save "
-		     "checkpoints.",
-		)
-parser.add_argument("--load-pthpath",
-		help="To continue training, path to .pth file of saved checkpoint.",
-		)
-parser.add_argument("--image-features-tr-h5",default="")
+parser.add_argument("--image-features-tr-h5", default="")
 parser.add_argument("--image-features-va-h5", default="")
 parser.add_argument("--image-features-te-h5", default="")
 parser.add_argument("--json-word-counts", default="")
+parser.add_argument("--num-epochs", default=20, type=int)
+parser.add_argument("--batch-size", default=20, type=int)
+parser.add_argument("--in-memory", action="store_true")
+parser.add_argument("--validate", action="store_true")
+parser.add_argument("--overfit", action="store_true")
+parser.add_argument("--gpu-ids", nargs="+", default=0, type=int)
+parser.add_argument("--cpu-workers", default=4, type=int)
+parser.add_argument("--lr", default=1e-3, type=float)
+parser.add_argument("--seed", default=0, type=int)
+parser.add_argument("--config-yml", default="")
+parser.add_argument("--comet-name", default="")
+parser.add_argument("--json-train", default="")
+parser.add_argument("--json-val", default="")
+parser.add_argument("--json-val-dense", default="")
+parser.add_argument("--save-dirpath", default="")
+parser.add_argument("--monitor-path", default="")
+parser.add_argument("--load-pthpath", default="")
 
 # =============================================================================
 #   INPUT ARGUMENTS AND CONFIG
@@ -125,20 +55,10 @@ args = parser.parse_args()
 config = yaml.load(open(args.config_yml))
 
 config['dataset']['image_features_train_h5'] = args.image_features_tr_h5
-config['dataset']['image_features_val_h5']   = args.image_features_va_h5
-config['dataset']['image_features_test_h5']  = args.image_features_te_h5
+config['dataset']['image_features_val_h5'] = args.image_features_va_h5
+config['dataset']['image_features_test_h5'] = args.image_features_te_h5
 config['dataset']['word_counts_json'] = args.json_word_counts
 
-
-if isinstance(args.gpu_ids, int):
-	args.gpu_ids = [args.gpu_ids]
-
-if len(args.gpu_ids) == 1:
-	device = torch.device('cuda')
-elif len(args.gpu_ids) > 1:
-	device = torch.device('cuda')
-else:
-	device = torch.device('cpu')
 
 # Print config and args.
 print(yaml.dump(config, default_flow_style=False))
@@ -153,6 +73,7 @@ experiment.log_asset(args.config_yml)
 
 for key in ['model', 'solver']:
 	experiment.log_parameters(config[key])
+
 
 # =============================================================================
 # For reproducibility.
@@ -174,6 +95,7 @@ def seed_torch(seed=0):
 
 	return worker_init_fn
 
+
 init_fn = seed_torch(args.seed)
 
 # =============================================================================
@@ -184,17 +106,20 @@ is_abtoks = True if config["model"]["decoder"] != "disc" else False
 is_return = True if config["model"]["decoder"] == "disc" else False
 
 # TODO: Comment this overfit test
+
 train_dataset = VisDialDataset(
 		config["dataset"],
 		args.json_train,
+		args.image_features_tr_h5,
+		args.json_word_counts,
 		overfit=args.overfit,
-		in_memory=args.in_memory,
 		return_options=is_return,
 		add_boundary_toks=is_abtoks,
 		)
+
 train_dataloader = DataLoader(
 		train_dataset,
-		batch_size=config["solver"]["batch_size"],
+		batch_size=args.batch_size,
 		num_workers=args.cpu_workers,
 		shuffle=True,
 		)
@@ -202,16 +127,18 @@ train_dataloader = DataLoader(
 val_dataset = VisDialDataset(
 		config["dataset"],
 		args.json_val,
+		args.image_features_va_h5,
+		args.json_word_counts,
 		args.json_val_dense,
 		overfit=args.overfit,
-		in_memory=args.in_memory,
 		return_options=True,
 		add_boundary_toks=is_abtoks,
+		jsonpath_dense_annotations=args.json_val_dense
 		)
 
 val_dataloader = DataLoader(
 		val_dataset,
-		batch_size=config["solver"]["batch_size"]
+		batch_size=args.batch_size
 		if config["model"]["decoder"] == "disc"
 		else 4,
 		num_workers=args.cpu_workers,
@@ -223,43 +150,38 @@ val_dataloader = DataLoader(
 # train_dataloader = val_dataloader
 
 # Pass vocabulary to construct Embedding layer.
-encoder = Encoder(config["model"], train_dataset.vocabulary)
-decoder = Decoder(config["model"], train_dataset.vocabulary)
-
 print("Encoder: {}".format(config["model"]["encoder"]))
 print("Decoder: {}".format(config["model"]["decoder"]))
 
+encoder = Encoder(config["model"], train_dataset.vocabulary)
+decoder = Decoder(config["model"], train_dataset.vocabulary)
 # Share word embedding between encoder and decoder.
 decoder.word_embed = encoder.word_embed
 
-is_bilstm = config['model']['is_bilstm']
-
 # Wrap encoder and decoder in a model.
-model = EncoderDecoderModel(encoder, decoder, is_bilstm=is_bilstm)
+model = EncoderDecoderModel(encoder, decoder)
+
+device = torch.device('cuda')
 
 model = model.to(device)
 
+if isinstance(args.gpu_ids, int):
+	args.gpu_ids = [args.gpu_ids]
+
 if len(args.gpu_ids) > 1:
 	model = nn.DataParallel(model)
-
 
 # Loss function.
 if config["model"]["decoder"] == "disc":
 	criterion = nn.CrossEntropyLoss()
 elif config["model"]["decoder"] == "gen":
-	criterion = nn.CrossEntropyLoss(
-			ignore_index=train_dataset.vocabulary.PAD_INDEX
-			)
-else:
-	raise NotImplementedError
+	criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 if config["solver"]["training_splits"] == "trainval":
-	iterations = (len(train_dataset) + len(val_dataset)) // config["solver"][
-		"batch_size"
-	] + 1
+	iterations = (len(train_dataset) + len(val_dataset)) // args.batch_size + 1
 	num_examples = torch.tensor(len(train_dataset) + len(val_dataset), dtype=torch.float)
 else:
-	iterations = len(train_dataset) // config["solver"]["batch_size"] + 1
+	iterations = len(train_dataset) // args.batch_size + 1
 	num_examples = torch.tensor(len(train_dataset), dtype=torch.float)
 
 optimizer = optim.Adam(model.parameters(), lr=args.lr)
@@ -296,11 +218,13 @@ start_epoch = 0
 # Forever increasing counter to keep track of iterations (for tensorboard log).
 global_iteration_step = start_epoch * iterations
 
+
 def move_to_cuda(batch, device):
 	for key in batch:
 		batch[key] = batch[key].to(device)
 
-for epoch in range(start_epoch, config["solver"]["num_epochs"]):
+
+for epoch in range(start_epoch, args.num_epochs):
 	# -------------------------------------------------------------------------
 	#   ON EPOCH START  (combine dataloaders if training on train + val)
 	# -------------------------------------------------------------------------
@@ -349,7 +273,6 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 			global_iteration_step += 1
 			torch.cuda.empty_cache()
 
-
 			epoch_loss += batch["ques"].size(0) * batch_loss.detach()
 
 		if config["model"]["decoder"] == "disc":
@@ -394,7 +317,7 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 				if "gt_relevance" in batch:
 					output = output[torch.arange(output.size(0)), batch["round_id"] - 1, :]
 					ndcg.observe(output, batch["gt_relevance"])
-					# monitor.update(batch['img_ids'], output, batch['ans_ind'])
+				# monitor.update(batch['img_ids'], output, batch['ans_ind'])
 
 		# if 'gt_relevance' in batch:
 		# 	monitor.export()

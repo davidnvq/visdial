@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
 # To run:
 # cd /content/visdial/scripts; cp train_gen_colab.sh train_gen_colab_`date +%d%b%Y`.sh; bash train_gen_colab_`date +%d%b%Y`.sh
-bash download_data.sh
-
-echo -e "\nSTART TRAINING....\n"
-
 ROOT=/content
 DATASET=$ROOT/datasets/visdial
 CKPOINT=$ROOT/checkpoints/tmp
 PATH_PROJ=$ROOT/visdial
 
+echo -e "\nSTART DOWNLOADING....\n"
+
+bash $PATH_PROJ/scripts/download_data.sh
+
+echo -e "\nSTART TRAINING....\n"
+
 COMET=test
-CONFIG=$PATH_PROJ/configs/attn_gen_faster_rcnn_x101.yml
+LR=1e-3
+BATCH_SIZE=32
+NUM_EPOCHS=10
+CONFIG=$PATH_PROJ/configs/attn_disc_faster_rcnn_x101.yml
 
 FILE[1]=$DATASET/features_faster_rcnn_x101_train.h5
 FILE[2]=$DATASET/features_faster_rcnn_x101_val.h5
@@ -29,8 +34,7 @@ PATH_MONI=$CKPOINT/monitor.pkl
 python /content/visdial/train.py \
 --validate \
 --overfit \
---gpu-ids 0 \
---cpu-workers 4 \
+--lr $LR \
 --comet-name $COMET \
 --config-yml $CONFIG \
 --image-features-tr-h5 ${FILE[1]} \
@@ -42,3 +46,5 @@ python /content/visdial/train.py \
 --json-val-dense ${FILE[7]} \
 --monitor-path $PATH_MONI \
 --save-dirpath $PATH_SAVE \
+--batch-size $BATCH_SIZE \
+--num-epochs $NUM_EPOCHS
