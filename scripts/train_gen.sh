@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # To run:
 # cd /content/visdial/scripts; cp train_gen_colab.sh train_gen_colab_`date +%d%b%Y`.sh; bash train_gen_colab_`date +%d%b%Y`.sh
-COMET=test
-CONFIG=configs/attn_gen_faster_rcnn_x101.yml
-
 ROOT=/home/ubuntu
 DATASET=$ROOT/datasets/visdial
 CKPOINT=$ROOT/checkpoints/tmp
+PATH_PROJ=$ROOT/visdial
+
+COMET=test
+CONFIG=$PATH_PROJ/configs/attn_gen_faster_rcnn_x101.yml
 
 
 FILE[1]=$DATASET/features_faster_rcnn_x101_train.h5
@@ -20,7 +21,7 @@ FILE[7]=$DATASET/visdial_1.0_val_dense_annotations.json
 PATH_LOAD="''"
 PATH_SAVE=$CKPOINT/
 PATH_MONI=$CKPOINT/monitor.pkl
-PATH_PROJ=$ROOT/visdial
+
 
 # Overfit
 python $PATH_PROJ/train.py \
