@@ -20,7 +20,7 @@ PATH_PROJ=$ROOT/visdial
 COMET=test
 LR=1e-3
 BATCH_SIZE=16
-NUM_EPOCHS=10
+NUM_EPOCHS=50
 CONFIG=$PATH_PROJ/configs/lf_disc_faster_rcnn_x101.yml
 
 

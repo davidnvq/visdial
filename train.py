@@ -293,7 +293,7 @@ for epoch in range(start_epoch, args.num_epochs):
 	# -------------------------------------------------------------------------
 	#   ON EPOCH END  (checkpointing and validation)
 	# -------------------------------------------------------------------------
-	if (epoch + 1) % 5 == 0:
+	if (epoch + 1) % 50 == 0:
 		checkpoint_manager.step(epoch=epoch)
 
 	# Validate and report automatic metrics.
