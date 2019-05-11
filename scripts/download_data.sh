@@ -46,6 +46,5 @@ for i in {5..6}
 do
     if [ -f ${FILE[i]} ]; then
         unzip ${FILE[i]} -d $DATASET
-        rm ${FILE[$i]}
     fi
 done
