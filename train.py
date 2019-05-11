@@ -274,19 +274,20 @@ ndcg = NDCG()
 monitor = Monitor(val_dataset, save_path=args.monitor_path)
 
 # If loading from checkpoint, adjust start epoch and load parameters.
-if args.load_pthpath == "":
-	start_epoch = 0
-else:
-	# "path/to/checkpoint_xx.pth" -> xx
-	start_epoch = int(args.load_pthpath.split("_")[-1][:-4]) + 1
-
-	model_state_dict, optimizer_state_dict = load_checkpoint(args.load_pthpath)
-	if isinstance(model, nn.DataParallel):
-		model.module.load_state_dict(model_state_dict)
-	else:
-		model.load_state_dict(model_state_dict)
-	optimizer.load_state_dict(optimizer_state_dict)
-	print("Loaded model from {}".format(args.load_pthpath))
+start_epoch = 0
+# if args.load_pthpath == "":
+# 	start_epoch = 0
+# else:
+# 	# "path/to/checkpoint_xx.pth" -> xx
+# 	start_epoch = int(args.load_pthpath.split("_")[-1][:-4]) + 1
+#
+# 	model_state_dict, optimizer_state_dict = load_checkpoint(args.load_pthpath)
+# 	if isinstance(model, nn.DataParallel):
+# 		model.module.load_state_dict(model_state_dict)
+# 	else:
+# 		model.load_state_dict(model_state_dict)
+# 	optimizer.load_state_dict(optimizer_state_dict)
+# 	print("Loaded model from {}".format(args.load_pthpath))
 
 # =============================================================================
 #   TRAINING LOOP
