@@ -21,7 +21,7 @@ COMET=test
 LR=1e-3
 BATCH_SIZE=32
 NUM_EPOCHS=10
-CONFIG=$PATH_PROJ/configs/attn_disc_faster_rcnn_x101.yml
+CONFIG=$PATH_PROJ/configs/lf_disc_faster_rcnn_x101.yml
 
 
 FILE[1]=$DATASET/features_faster_rcnn_x101_train.h5
