@@ -29,6 +29,7 @@ import torch
 import pickle
 from nltk.tokenize.treebank import TreebankWordDetokenizer
 
+
 def scores_to_ranks(scores: torch.Tensor):
 	"""Convert model output scores into ranks."""
 	batch_size, num_rounds, num_options = scores.size()
@@ -235,7 +236,7 @@ class Monitor(object):
 			'rel_texts'   : rel_texts,
 			'rel_preds'   : [],
 			'rel_question': rel_question,
-			'rel_ans_idx': rel_ans_idx,
+			'rel_ans_idx' : rel_ans_idx,
 			'attn_weights': attn_weights,
 			}
 

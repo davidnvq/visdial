@@ -16,7 +16,6 @@ img_ids = monitor.img_ids
 img_dialogs = monitor.img_dialogs
 elem = img_dialogs[img_ids[0]]
 
-
 questions = []
 answers = []
 
@@ -27,8 +26,7 @@ for img_id in img_ids:
 	top_answers = [elem['rel_texts'][idx] for idx in nonzero_rel_indices]
 	answers.append(top_answers)
 
-
-i = 0 
+i = 0
 for q, a in zip(questions, answers):
 	print(f'Question {i}', q)
 	print(a[:10])

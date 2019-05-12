@@ -1,4 +1,5 @@
 import matplotlib
+
 matplotlib.use('TkAgg')
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
@@ -12,6 +13,7 @@ from tkinter import ttk
 from PIL import Image, ImageTk
 from matplotlib.figure import Figure
 from matplotlib import patches
+
 
 class Window(tk.Frame):
 
@@ -68,13 +70,13 @@ class Window(tk.Frame):
 		self.master.grid_columnconfigure(1, weight=1)
 		self.master.grid_columnconfigure(2, weight=1)
 
-		self.master.bind('<Left>',  lambda event: self.on_image(is_next=False))
+		self.master.bind('<Left>', lambda event: self.on_image(is_next=False))
 		self.master.bind('<Right>', lambda event: self.on_image(is_next=True))
-		self.master.bind('<Down>',  lambda event: self.on_epoch(is_next=False))
-		self.master.bind('<Up>',    lambda event: self.on_epoch(is_next=True))
-		self.master.bind('a',       lambda event: self.on_quest(is_next=False))
-		self.master.bind('d',       lambda event: self.on_quest(is_next=True))
-		self.master.bind('r',       lambda event: self.on_files())
+		self.master.bind('<Down>', lambda event: self.on_epoch(is_next=False))
+		self.master.bind('<Up>', lambda event: self.on_epoch(is_next=True))
+		self.master.bind('a', lambda event: self.on_quest(is_next=False))
+		self.master.bind('d', lambda event: self.on_quest(is_next=True))
+		self.master.bind('r', lambda event: self.on_files())
 
 		self.master.bind('1', lambda event: self.to_quest(quest_index=0))
 		self.master.bind('2', lambda event: self.to_quest(quest_index=1))
@@ -155,7 +157,7 @@ class Window(tk.Frame):
 		text += '  Dialog\n\n'
 
 		for i in range(ques_index + 1):
-			text += '  Q{}: {}\n'.format(i + 1, questions[i][:char_limit].capitalize()) # 80 characters
+			text += '  Q{}: {}\n'.format(i + 1, questions[i][:char_limit].capitalize())  # 80 characters
 			text += '  A{}: {}\n'.format(i + 1, answers[i][:char_limit].capitalize())
 
 		text += '  ----' + '-' * char_limit + '\n'
@@ -192,7 +194,7 @@ class Window(tk.Frame):
 		self.dialog.pack(side='top')
 
 	def show_relevance(self, img_index, ques_index, epoch_index):
-		fig = Figure(figsize=(5,4))
+		fig = Figure(figsize=(5, 4))
 
 		if self.rel_ax is not None:
 			self.rel_ax.clear()
@@ -221,7 +223,6 @@ class Window(tk.Frame):
 		self.rel_ax.autoscale(tight=True)
 		self.rel_ax.legend()
 
-
 		fig.tight_layout()
 
 		if self.rel_canvas is None:
@@ -237,7 +238,7 @@ class Window(tk.Frame):
 		char_limit = 80
 		target_answer = self.img_dialogs[self.img_ids[img_index]]['dialog'][1][ques_index]
 		opts_dict = self.img_dialogs[self.img_ids[img_index]]['scores'][ques_index][epoch_index]
-		fig = Figure(figsize=(5,4))
+		fig = Figure(figsize=(5, 4))
 
 		if self.rank_ax is not None:
 			self.rank_ax.clear()

@@ -16,7 +16,6 @@ img_ids = monitor.img_ids
 img_dialogs = monitor.img_dialogs
 elem = img_dialogs[img_ids[0]]
 
-
 questions = []
 answers = []
 
@@ -26,7 +25,6 @@ for img_id in img_ids:
 	nonzero_rel_indices = elem['rel_scores'].nonzero().squeeze(-1)
 	top_answers = [elem['rel_texts'][idx] for idx in nonzero_rel_indices]
 	answers.append(top_answers)
-
 
 template_questions = [
 	'can you see',
@@ -41,4 +39,3 @@ template_questions = [
 	'does she',
 	'do they',
 	]
-

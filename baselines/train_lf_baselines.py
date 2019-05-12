@@ -149,6 +149,7 @@ experiment.log_asset(args.config_yml)
 for key in ['model', 'solver']:
 	experiment.log_parameters(config[key])
 
+
 # =============================================================================
 # For reproducibility.
 # =============================================================================
@@ -168,6 +169,7 @@ def seed_torch(seed=0):
 		np.random.seed(seed + worker_id)
 
 	return worker_init_fn
+
 
 init_fn = seed_torch(args.seed)
 
@@ -235,7 +237,6 @@ model = model.to(device)
 
 if len(args.gpu_ids) > 1:
 	model = nn.DataParallel(model)
-
 
 # Loss function.
 if config["model"]["decoder"] == "disc":
@@ -363,9 +364,7 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 					"train/metrics", all_metrics, global_iteration_step
 					)
 
-
 		epoch_loss /= num_examples
-
 
 		summary_writer.add_scalar(
 				"train/epoch_loss", epoch_loss, i
@@ -413,7 +412,6 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 		for metric_name, metric_value in all_metrics.items():
 			print(f"{metric_name}: {metric_value}")
 			experiment.log_metric(f"val/{metric_name}", metric_value)
-
 
 		summary_writer.add_scalars(
 				"val/metrics", all_metrics, global_iteration_step

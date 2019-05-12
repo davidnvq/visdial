@@ -10,17 +10,20 @@ function download_file (){
     fi
 }
 ROOT=/content
+GDRIVE=/content/gdrive/My\ Drive/datasets/visdial
 DATASET=$ROOT/datasets/visdial
+
+cp $GDRIVE/* $DATASET
 
 FILE[1]=$DATASET/features_faster_rcnn_x101_train.h5
 FILE[2]=$DATASET/features_faster_rcnn_x101_val.h5
 FILE[3]=$DATASET/features_faster_rcnn_x101_test.h5
 FILE[4]=$DATASET/visdial_1.0_word_counts_train.json
 FILE[5]=$DATASET/visdial_1.0_val_dense_annotations.json
-FILE[6]=$DATASET/visdial_1.0_train.zip
-FILE[7]=$DATASET/visdial_1.0_val.zip
-FILE[8]=$DATASET/visdial_1.0_train.json
-FILE[9]=$DATASET/visdial_1.0_val.json
+FILE[6]=$DATASET/visdial_1.0_train.json
+FILE[7]=$DATASET/visdial_1.0_val.json
+FILE[8]=$DATASET/visdial_1.0_train.zip
+FILE[9]=$DATASET/visdial_1.0_val.zip
 
 LINK[1]='https://s3.amazonaws.com/visual-dialog/data/v1.0/2019/features_faster_rcnn_x101_train.h5'
 LINK[2]='https://s3.amazonaws.com/visual-dialog/data/v1.0/2019/features_faster_rcnn_x101_val.h5'
@@ -37,16 +40,17 @@ if [ ! -d $DATASET ]; then
 fi
 
 # Download
-for i in {1..7}
+for i in {1..5}
 do
     download_file ${FILE[$i]} ${LINK[$i]}
 done
 
 # Unzip
-for i in {8..9}
+for i in {6..7}
 do
     if [ ! -f ${FILE[i]} ]; then
-        idx=$((i - 2))
+        idx=$((i + 2))
+        download_file ${FILE[idx]} ${LINK[idx]}
         unzip ${FILE[idx]} -d $DATASET
     fi
 done

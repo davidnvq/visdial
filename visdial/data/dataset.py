@@ -22,16 +22,17 @@ class VisDialDataset(Dataset):
 	to the appropriate split, it returns dictionary of question, image,
 	history, ground truth answer, answer options, dense annotations etc.
 	"""
+
 	def __init__(
 			self,
 			config,
 			jsonpath_dialogs=None,
-			jsonpath_vocab_dict=None,
+			jsonpath_vocab=None,
+			jsonpath_dense='',
 			hdfpath_img_features=None,
 			overfit: bool = False,
 			return_options: bool = True,
 			add_boundary_toks: bool = False,
-			jsonpath_dense_annotations=None,
 			):
 
 		super().__init__()
@@ -39,9 +40,11 @@ class VisDialDataset(Dataset):
 		self.return_options = return_options
 		self.add_boundary_toks = add_boundary_toks
 		self.dialogs_reader = DialogsReader(jsonpath_dialogs)
-		self.annotations_reader = None if jsonpath_dense_annotations is None else \
-			DenseAnnotationsReader(jsonpath_dense_annotations)
-		self.vocabulary = Vocabulary(jsonpath_vocab_dict, config["vocab_min_count"])
+		if jsonpath_dense != '':
+			self.annotations_reader = DenseAnnotationsReader(jsonpath_dense)
+		else:
+			self.annotations_reader = None
+		self.vocabulary = Vocabulary(jsonpath_vocab, config["vocab_min_count"])
 		self.hdf_reader = ImageFeaturesHdfReader(hdfpath_img_features)
 
 		# Keep a list of image_ids as primary keys to access data.

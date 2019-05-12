@@ -9,7 +9,6 @@ from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-
 from visdial.encoders import Encoder
 from visdial.decoders import Decoder
 from visdial.model import EncoderDecoderModel
@@ -256,5 +255,3 @@ json.dump(ranks_json, open(args.save_ranks_path, "w"))
 output_path = ''.join(args.save_ranks_path.split('.')[:-1]) + '.pkl'
 with open(output_path, 'wb') as f:
 	pickle.dump([all_outputs, all_img_ids, all_round_ids], f)
-
-

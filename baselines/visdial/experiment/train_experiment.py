@@ -132,8 +132,8 @@ train_dataset = VisDialDataset(
 		args.train_json,
 		overfit=args.overfit,
 		in_memory=args.in_memory,
-		return_options=False, # for gen
-		add_boundary_toks=True, # for gen
+		return_options=False,  # for gen
+		add_boundary_toks=True,  # for gen
 		)
 train_dataloader = DataLoader(
 		train_dataset,
@@ -305,8 +305,8 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 				batch[key] = batch[key].to(device)
 			with torch.no_grad():
 				output = model(batch)
-				# BS x 10 x 100, BS x 10
-				# print('val_loss', criterion(output.view(-1, 100), batch['ans_ind'].view(-1)))
+			# BS x 10 x 100, BS x 10
+			# print('val_loss', criterion(output.view(-1, 100), batch['ans_ind'].view(-1)))
 			sparse_metrics.observe(output, batch["ans_ind"])
 			if "gt_relevance" in batch:
 				output = output[
@@ -320,7 +320,6 @@ for epoch in range(start_epoch, config["solver"]["num_epochs"]):
 		for metric_name, metric_value in all_metrics.items():
 			print(f"{metric_name}: {metric_value}")
 			experiment.log_metric(f"val/{metric_name}", metric_value)
-
 
 		summary_writer.add_scalars(
 				"metrics", all_metrics, global_iteration_step

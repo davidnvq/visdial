@@ -323,4 +323,3 @@ class AttentionEncoder(nn.Module):
 		if debug:
 			return fused_embed, None
 		return fused_embed
-

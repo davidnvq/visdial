@@ -106,7 +106,6 @@ class LateFusionEncoder(nn.Module):
 
 		_, (hist_embed, _) = self.hist_rnn(hist_embed, hist_len)
 
-
 		if self.is_bilstm:
 			# shape: [2, BS x NR, HS] <- select the last layer
 			ques_embed = ques_embed[-2:]

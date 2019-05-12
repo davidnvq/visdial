@@ -104,7 +104,6 @@ class LateFusionEncoder(nn.Module):
 
 		_, (hist_embed, _) = self.hist_rnn(hist_embed, hist_len)
 
-
 		# shape: [2, BS x NR, HS] <- select the last layer
 		ques_embed = ques_embed[-2:]
 		# shape: [BS x NR, HS x 2]
@@ -118,7 +117,6 @@ class LateFusionEncoder(nn.Module):
 		hist_embed = torch.cat([hist_embed[0], hist_embed[1]], dim=-1)
 		# shape: [BS x NR, HS]
 		hist_embed = self.hist_linear(hist_embed)
-
 
 		# project down image features and ready for attention
 		# shape: [BS, NP, HS]

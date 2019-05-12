@@ -233,7 +233,7 @@ class Monitor(object):
 			'rel_texts'   : rel_texts,
 			'rel_preds'   : [],
 			'rel_question': rel_question,
-			'rel_ans_idx': rel_ans_idx,
+			'rel_ans_idx' : rel_ans_idx,
 			'attn_weights': attn_weights,
 			}
 

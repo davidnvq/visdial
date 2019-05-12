@@ -9,32 +9,33 @@ import itertools
 import numpy as np
 
 from tqdm import tqdm
-from bisect import bisect
 from torch import nn, optim
-from torch.optim import lr_scheduler
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
-
-from visdial.encoders import Encoder, AttentionEncoder
+from torch.optim.lr_scheduler import MultiStepLR
+from visdial.encoders import Encoder
 from visdial.decoders import Decoder
 from visdial.model import EncoderDecoderModel
+from visdial.loss import get_criterion
 from visdial.data.dataset import VisDialDataset
 from visdial.metrics import SparseGTMetrics, NDCG, Monitor
 from visdial.utils.checkpointing import CheckpointManager, load_checkpoint
+from visdial.utils import move_to_cuda
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--image-features-tr-h5", default="")
 parser.add_argument("--image-features-va-h5", default="")
 parser.add_argument("--image-features-te-h5", default="")
 parser.add_argument("--json-word-counts", default="")
+parser.add_argument("--lr", default=1e-2, type=float)
 parser.add_argument("--num-epochs", default=20, type=int)
-parser.add_argument("--batch-size", default=20, type=int)
+parser.add_argument("--batch-size", default=16, type=int)
 parser.add_argument("--in-memory", action="store_true")
 parser.add_argument("--validate", action="store_true")
 parser.add_argument("--overfit", action="store_true")
 parser.add_argument("--gpu-ids", nargs="+", default=0, type=int)
+parser.add_argument("--lr_steps", nargs="+", default=[5, 10], type=int)
 parser.add_argument("--cpu-workers", default=4, type=int)
-parser.add_argument("--lr", default=1e-3, type=float)
 parser.add_argument("--seed", default=0, type=int)
 parser.add_argument("--config-yml", default="")
 parser.add_argument("--comet-name", default="")
@@ -42,8 +43,9 @@ parser.add_argument("--json-train", default="")
 parser.add_argument("--json-val", default="")
 parser.add_argument("--json-val-dense", default="")
 parser.add_argument("--save-dirpath", default="")
-parser.add_argument("--monitor-path", default="")
+parser.add_argument("--step-size", default=10, type=int)
 parser.add_argument("--load-pthpath", default="")
+parser.add_argument("--resume", action="store_true")
 
 # =============================================================================
 #   INPUT ARGUMENTS AND CONFIG
@@ -53,12 +55,6 @@ args = parser.parse_args()
 
 # keys: {"dataset", "model", "solver"}
 config = yaml.load(open(args.config_yml))
-
-config['dataset']['image_features_train_h5'] = args.image_features_tr_h5
-config['dataset']['image_features_val_h5'] = args.image_features_va_h5
-config['dataset']['image_features_test_h5'] = args.image_features_te_h5
-config['dataset']['word_counts_json'] = args.json_word_counts
-
 
 # Print config and args.
 print(yaml.dump(config, default_flow_style=False))
@@ -107,28 +103,29 @@ is_return = True if config["model"]["decoder"] == "disc" else False
 
 # TODO: Comment this overfit test
 
-# train_dataset = VisDialDataset(
-# 		config["dataset"],
-# 		jsonpath_dialogs=args.json_train,
-# 		hdfpath_img_features=args.image_features_tr_h5,
-# 		jsonpath_vocab_dict=args.json_word_counts,
-# 		overfit=args.overfit,
-# 		return_options=is_return,
-# 		add_boundary_toks=is_abtoks,
-# 		)
-#
-# train_dataloader = DataLoader(
-# 		train_dataset,
-# 		batch_size=args.batch_size,
-# 		num_workers=args.cpu_workers,
-# 		shuffle=True,
-# 		)
+train_dataset = VisDialDataset(
+		config["dataset"],
+		jsonpath_dialogs=args.json_train,
+		hdfpath_img_features=args.image_features_tr_h5,
+		jsonpath_vocab=args.json_word_counts,
+		overfit=args.overfit,
+		return_options=is_return,
+		add_boundary_toks=is_abtoks,
+		)
+
+train_dataloader = DataLoader(
+		train_dataset,
+		batch_size=args.batch_size,
+		num_workers=args.cpu_workers,
+		shuffle=True,
+		worker_init_fn=init_fn
+		)
 
 val_dataset = VisDialDataset(
 		config["dataset"],
 		jsonpath_dialogs=args.json_val,
-		jsonpath_vocab_dict=args.json_word_counts,
-		jsonpath_dense_annotations=args.json_val_dense,
+		jsonpath_vocab=args.json_word_counts,
+		jsonpath_dense=args.json_val_dense,
 		hdfpath_img_features=args.image_features_va_h5,
 		overfit=args.overfit,
 		return_options=True,
@@ -137,16 +134,14 @@ val_dataset = VisDialDataset(
 
 val_dataloader = DataLoader(
 		val_dataset,
-		batch_size=args.batch_size
-		if config["model"]["decoder"] == "disc"
-		else 4,
+		batch_size=4,
 		num_workers=args.cpu_workers,
 		worker_init_fn=init_fn
 		)
 
 # # TODO: Uncomment this overfit test
-train_dataset = val_dataset
-train_dataloader = val_dataloader
+# train_dataset = val_dataset
+# train_dataloader = val_dataloader
 
 # Pass vocabulary to construct Embedding layer.
 print("Encoder: {}".format(config["model"]["encoder"]))
@@ -164,17 +159,8 @@ device = torch.device('cuda')
 
 model = model.to(device)
 
-if isinstance(args.gpu_ids, int):
-	args.gpu_ids = [args.gpu_ids]
-
-if len(args.gpu_ids) > 1:
-	model = nn.DataParallel(model)
-
 # Loss function.
-if config["model"]["decoder"] == "disc":
-	criterion = nn.CrossEntropyLoss()
-elif config["model"]["decoder"] == "gen":
-	criterion = nn.CrossEntropyLoss(ignore_index=0)
+criterion = get_criterion(config['model']['decoder'])
 
 if config["solver"]["training_splits"] == "trainval":
 	iterations = (len(train_dataset) + len(val_dataset)) // args.batch_size + 1
@@ -184,7 +170,7 @@ else:
 	num_examples = torch.tensor(len(train_dataset), dtype=torch.float)
 
 optimizer = optim.Adam(model.parameters(), lr=args.lr)
-
+scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=0.1)
 # =============================================================================
 #   SETUP BEFORE TRAINING LOOP
 # =============================================================================
@@ -193,34 +179,31 @@ checkpoint_manager = CheckpointManager(model, optimizer, args.save_dirpath, conf
 sparse_metrics = SparseGTMetrics()
 ndcg = NDCG()
 
-# monitor = Monitor(val_dataset, save_path=args.monitor_path)
+# monitor = Monitor(val_dataset, save_path=args.monitor_path + '/val_monitor.pkl')
 
 # If loading from checkpoint, adjust start epoch and load parameters.
 start_epoch = 0
-# if args.load_pthpath == "":
-# 	start_epoch = 0
-# else:
-# 	# "path/to/checkpoint_xx.pth" -> xx
-# 	start_epoch = int(args.load_pthpath.split("_")[-1][:-4]) + 1
-#
-# 	model_state_dict, optimizer_state_dict = load_checkpoint(args.load_pthpath)
-# 	if isinstance(model, nn.DataParallel):
-# 		model.module.load_state_dict(model_state_dict)
-# 	else:
-# 		model.load_state_dict(model_state_dict)
-# 	optimizer.load_state_dict(optimizer_state_dict)
-# 	print("Loaded model from {}".format(args.load_pthpath))
+
+if args.load_pthpath != "":
+	if args.resume:
+		start_epoch, model, optimizer = load_checkpoint(
+				args.load_pthpath,
+				model, optimizer,
+				device=args.device, resume=True)
+	else:
+		model = load_checkpoint(args.load_pthpath, model, device=args.device)
+
+if isinstance(args.gpu_ids, int):
+	args.gpu_ids = [args.gpu_ids]
+
+if len(args.gpu_ids) > 1:
+	model = nn.DataParallel(model)
 
 # =============================================================================
 #   TRAINING LOOP
 # =============================================================================
 # Forever increasing counter to keep track of iterations (for tensorboard log).
 global_iteration_step = start_epoch * iterations
-
-
-def move_to_cuda(batch, device):
-	for key in batch:
-		batch[key] = batch[key].to(device)
 
 
 for epoch in range(start_epoch, args.num_epochs):
@@ -238,7 +221,7 @@ for epoch in range(start_epoch, args.num_epochs):
 		epoch_loss = torch.tensor(0.0)
 
 		for i, batch in enumerate(combined_dataloader):
-			move_to_cuda(batch, device)
+			batch = move_to_cuda(batch, device)
 
 			# zero grad
 			optimizer.zero_grad()
@@ -290,12 +273,10 @@ for epoch in range(start_epoch, args.num_epochs):
 		summary_writer.add_scalar("train/epoch_loss", epoch_loss, i)
 		experiment.log_metric('train/epoch_loss', epoch_loss.item())
 
+	scheduler.step(epoch)
 	# -------------------------------------------------------------------------
 	#   ON EPOCH END  (checkpointing and validation)
 	# -------------------------------------------------------------------------
-	if (epoch + 1) % 50 == 0:
-		checkpoint_manager.step(epoch=epoch)
-
 	# Validate and report automatic metrics.
 	if args.validate:
 
@@ -317,7 +298,8 @@ for epoch in range(start_epoch, args.num_epochs):
 				if "gt_relevance" in batch:
 					output = output[torch.arange(output.size(0)), batch["round_id"] - 1, :]
 					ndcg.observe(output, batch["gt_relevance"])
-				# monitor.update(batch['img_ids'], output, batch['ans_ind'])
+
+		# monitor.update(batch['img_ids'], output, batch['ans_ind'])
 
 		# if 'gt_relevance' in batch:
 		# 	monitor.export()
@@ -334,3 +316,9 @@ for epoch in range(start_epoch, args.num_epochs):
 
 		model.train()
 		torch.cuda.empty_cache()
+
+	# Checkpoint
+	if (epoch + 1) % args.step_size == 0:
+		checkpoint_manager.step(epoch=epoch)
+	else:
+		checkpoint_manager.step(epoch=epoch, only_best=True, metrics=all_metrics)
