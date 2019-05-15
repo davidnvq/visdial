@@ -61,9 +61,9 @@ def download_dataset(train=False):
 		]
 
 	if train is False:
-		file_paths == file_paths[:-2]
-		for file_path in file_paths:
-			print('this', file_path)
+		file_paths = file_paths[:-2]
+		file_links = file_links[:-2]
+		print('this', len(file_paths))
 
 	for i in range(len(file_paths)):
 
