@@ -71,9 +71,7 @@ def download_dataset(train=False):
 				os.makedirs(os.path.dirname(file_paths[i]))
 
 			if 'zip' in file_links[i]:
-				file_path = file_paths[i].split('.')[:-1]
-				file_path = file_path.append('zip')
-				file_path = '.'.join(file_path)
+				file_paths[i] = file_paths[i].replace('json', 'zip')
 			execute_cmd('wget {} --output-document={}'.format(file_links[i], file_paths[i]))
 			print('Finished downloading!\n')
 
