@@ -65,7 +65,10 @@ def download_dataset(train=False):
 			continue
 
 		if not file_exists(file_paths[i]):
-			print('Downloading {}...'.format(file_paths[i]))
+			print('Downloading {} ...'.format(file_paths[i]))
+			if not file_exists(os.path.dirname(file_paths[i])):
+				os.makedirs(os.path.dirname(file_paths[i]))
+
 			execute_cmd('wget {} --output-document={}'.format(file_links[i], file_paths[i]))
 			print('Finished downloading!\n')
 
