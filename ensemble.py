@@ -28,7 +28,7 @@ parser.add_argument('--json-dense', default='')
 parser.add_argument('--load-pthpaths', nargs='+', default=['', ''])
 parser.add_argument('--gpu-ids', default=[0], nargs='+', type=int)
 parser.add_argument('--cpu-workers', default=4, type=int)
-parser.add_argument('--overfit', action='store-true')
+parser.add_argument('--overfit', action='store_true')
 parser.add_argument("--save-ranks-path", default='')
 
 # For reproducibility.
