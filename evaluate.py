@@ -3,6 +3,8 @@ import json
 import yaml
 import pickle
 import argparse
+import nltk
+nltk.download('punkt')
 
 import torch
 from torch import nn
