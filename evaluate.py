@@ -118,9 +118,14 @@ all_outputs = []
 all_img_ids = []
 all_round_ids = []
 
+num_imgs = 0
+
 for _, batch in enumerate(tqdm(dataloader)):
+	num_imgs += len(batch['img_ids'])
+
 	for key in batch:
 		batch[key] = batch[key].to(device)
+
 	with torch.no_grad():
 		output = model(batch)
 
@@ -163,6 +168,8 @@ for _, batch in enumerate(tqdm(dataloader)):
 			         torch.arange(output.size(0)), batch["round_id"] - 1, :
 			         ]
 			ndcg.observe(output, batch["gt_relevance"])
+
+print('num_ings', num_imgs)
 
 if args.split == "val":
 	all_metrics = {}

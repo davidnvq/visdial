@@ -86,10 +86,12 @@ class CheckpointManager(object):
 		else:
 			if metrics['ndcg'] >= self.best_ndcg:
 				self.best_ndcg = metrics['ndcg']
+				print('Save best ndcg {} at epoch {}'.format(self.best_ndcg, epoch))
 				self._save_state_dict('best_ndcg', epoch, metrics)
 
 			if metrics['mean'] <= self.best_mean:
 				self.best_mean = metrics['mean']
+				print('Save best mean {} at epoch {}'.format(self.best_mean, epoch))
 				self._save_state_dict('best_mean', epoch, metrics)
 
 		self._save_state_dict('last', epoch, metrics)
