@@ -44,6 +44,7 @@ def download_dataset(verbose=True, train=False):
 		os.path.join(dir_path, 'features_faster_rcnn_x101_test.h5'),
 		os.path.join(dir_path, 'visdial_1.0_word_counts_train.json'),
 		os.path.join(dir_path, 'visdial_1.0_val_dense_annotations.json'),
+		os.path.join(dir_path, 'visdial_1.0_val_dense_annotations.json'),
 		os.path.join(dir_path, 'visdial_1.0_val.json'),
 		os.path.join(dir_path, 'visdial_1.0_train.json'),
 		os.path.join(dir_path, 'features_faster_rcnn_x101_train.h5'),
