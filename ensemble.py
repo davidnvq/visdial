@@ -94,7 +94,6 @@ for i, config_yml in enumerate(args.config_ymls):
 	# Wrap encoder and decoder in a model.
 	model = EncoderDecoderModel(encoder, decoder)
 	model = model.to(device)
-
 	model = load_checkpoint(args.load_pthpaths[i], model, device=device)
 	models.append(model)
 
@@ -175,4 +174,3 @@ if args.split == "val":
 print("Writing ranks to {}".format(args.save_ranks_path))
 os.makedirs(os.path.dirname(args.save_ranks_path), exist_ok=True)
 json.dump(ranks_json, open(args.save_ranks_path, "w"))
-
