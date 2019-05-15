@@ -105,12 +105,6 @@ for i, config_yml in enumerate(args.config_ymls):
 sparse_metrics_a = SparseGTMetrics()
 ndcg_a = NDCG()
 
-sparse_metrics_b = SparseGTMetrics()
-ndcg_b = NDCG()
-
-sparse_metrics_c = SparseGTMetrics()
-ndcg_c = NDCG()
-
 # =============================================================================
 #   EVALUATION LOOP
 # =============================================================================
@@ -122,7 +116,9 @@ all_outputs = []
 all_img_ids = []
 all_round_ids = []
 
-for i, batch1 in enumerate(tqdm(dataloaders[0])):
+for i in range(len(dataloaders[0])):
+	print('batch index', i)
+
 	batch2 = next(dataloaders[1])
 
 	batch1 = move_to_cuda(batch1, device)

@@ -13,4 +13,4 @@ python $PATH_PROJ/scripts/colab_eval.py \
 --encoder $ENCODER \
 --decoder $DECODER \
 --ckpt-path 'may13' \
---load-pthpath 'checkpoint_best_ndcg.pth'
+--load-pthpath 'checkpoint_best_mean.pth'
