@@ -38,7 +38,7 @@ def file_exists(file_path, verbose=True):
 	return os.path.exists(file_path)
 
 
-def download_dataset(train=False):
+def download_dataset(verbose=True, train=False):
 	dir_path = os.path.join(ROOT, 'datasets', 'visdial')
 	file_paths = [
 		os.path.join(dir_path, 'features_faster_rcnn_x101_val.h5'),

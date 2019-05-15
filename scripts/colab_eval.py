@@ -95,9 +95,9 @@ def evaluate(args_dict):
 
 
 if __name__ == '__main__':
-	install_packages()
+	# install_packages()
 	# pull_project()
-	mount_gdrive()
+	# mount_gdrive()
 	args_dict = get_args_dict()
 	download_dataset()
 	evaluate(args_dict)
