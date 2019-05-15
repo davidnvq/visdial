@@ -25,7 +25,7 @@ def install_packages():
 def mount_gdrive():
 	try:
 		from google.colab import drive
-		drive.mount('/content/gdrive', force_remount=True)
+		drive.mount('/content/gdrive')
 
 	except ModuleNotFoundError:
 		raise ModuleNotFoundError
