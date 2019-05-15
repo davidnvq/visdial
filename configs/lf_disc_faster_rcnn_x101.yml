@@ -16,7 +16,6 @@ model:
   lstm_num_layers: 2
   dropout: 0.2
 
-
 # Optimization related arguments
 solver:
   training_splits: "train"  # "trainval"
