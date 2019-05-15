@@ -53,7 +53,7 @@ config = yaml.load(open(args.config_ymls[0]))
 if isinstance(args.gpu_ids, int):
 	args.gpu_ids = [args.gpu_ids]
 
-device = torch.device('cuda')
+device = 'cuda'
 
 # Print config and args.
 print(yaml.dump(config, default_flow_style=False))
@@ -100,7 +100,7 @@ for i, config_yml in enumerate(args.config_ymls):
 	model = EncoderDecoderModel(encoder, decoder)
 	model = model.to(device)
 
-	model = load_checkpoint(args.load_pthpaths[i], model, device=args.device)
+	model = load_checkpoint(args.load_pthpaths[i], model, device=device)
 	models.append(model)
 
 # Declare metric accumulators (won't be used if --split=test)
