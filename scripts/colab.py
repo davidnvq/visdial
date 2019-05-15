@@ -34,7 +34,7 @@ def mount_gdrive():
 
 def file_exists(file_path):
 	if os.path.exists(file_path):
-		print('{: <80}: exists!'.format(file_path))
+		print('{: <50}: exists!'.format(file_path))
 	return os.path.exists(file_path)
 
 
@@ -71,7 +71,9 @@ def download_dataset(train=False):
 				os.makedirs(os.path.dirname(file_paths[i]))
 
 			if 'zip' in file_links[i]:
-				file_paths[i] = '.'.join(file_paths[i].split('.')[:-1].append('zip'))
+				file_path = file_paths[i].split('.')[:-1]
+				file_path = file_path.append('zip')
+				file_path = '.'.join(file_path)
 			execute_cmd('wget {} --output-document={}'.format(file_links[i], file_paths[i]))
 			print('Finished downloading!\n')
 
