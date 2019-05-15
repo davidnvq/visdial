@@ -4,7 +4,7 @@ SPLIT='val'
 ROOT='/content'
 PATH_PROJ=$ROOT/visdial
 DATA=$ROOT/datasets/visdial
-CKPT='/content/gdrive/My\ Drive/checkpoints/lf_disc/may13'
+CKPT='/content/gdrive/My Drive/checkpoints/lf_disc/may13'
 CONFIG=$PATH_PROJ/configs/lf_disc_faster_rcnn_x101.yml
 
 python $PATH_PROJ/ensemble.py \
