@@ -17,6 +17,8 @@ from visdial.utils.checkpointing import load_checkpoint
 from visdial.utils import move_to_cuda
 from visdial.metrics import SparseGTMetrics, NDCG, scores_to_ranks
 
+CKPT1='/content/gdrive/My\ Drive/checkpoints/lf_disc/may13/checkpoint_best_ndcg.pth'
+CKPT2='/content/gdrive/My\ Drive/checkpoints/lf_disc/may13/checkpoint_best_mean.pth'
 
 parser = argparse.ArgumentParser("Evaluate and/or generate EvalAI submission file.")
 parser.add_argument('--config-ymls', nargs='+', default=['', ''])
@@ -25,7 +27,7 @@ parser.add_argument("--split", default="val")
 parser.add_argument("--json-word-counts", default="")
 parser.add_argument('--json-dialogs', default='')
 parser.add_argument('--json-dense', default='')
-parser.add_argument('--load-pthpaths', nargs='+', default=['', ''])
+parser.add_argument('--load-pthpaths', nargs='+', default=[CKPT1, CKPT2])
 parser.add_argument('--gpu-ids', default=[0], nargs='+', type=int)
 parser.add_argument('--cpu-workers', default=4, type=int)
 parser.add_argument('--overfit', action='store_true')
