@@ -19,16 +19,21 @@ from visdial.metrics import SparseGTMetrics, NDCG, scores_to_ranks
 
 CKPT1='/content/gdrive/My Drive/checkpoints/lf_disc/may13/checkpoint_best_ndcg.pth'
 CKPT2='/content/gdrive/My Drive/checkpoints/lf_disc/may13/checkpoint_best_mean.pth'
+CKPT3='/content/gdrive/My Drive/checkpoints/lf_gen/checkpoint_9.pth'
+
+CONFIG1='/content/visdial/configs/lf_disc_faster_rcnn_x101.yml'
+CONFIG2='/content/visdial/configs/lf_disc_faster_rcnn_x101.yml'
+CONFIG3='/content/visdial/configs/lf_gen_faster_rcnn_x101.yml'
 
 parser = argparse.ArgumentParser("Evaluate and/or generate EvalAI submission file.")
-parser.add_argument('--config-ymls', nargs='+', default=['', ''])
+parser.add_argument('--config-ymls', nargs='+', default=[CONFIG1,CONFIG2, CONFIG3 ])
 parser.add_argument("--image-features-h5", default="")
 parser.add_argument("--split", default="val")
 parser.add_argument("--json-word-counts", default="")
 parser.add_argument('--json-dialogs', default='')
 parser.add_argument('--device', default='cuda')
 parser.add_argument('--json-dense', default='')
-parser.add_argument('--load-pthpaths', nargs='+', default=[CKPT1, CKPT2])
+parser.add_argument('--load-pthpaths', nargs='+', default=[CKPT1, CKPT2, CKPT3])
 parser.add_argument('--gpu-ids', default=[0], nargs='+', type=int)
 parser.add_argument('--cpu-workers', default=4, type=int)
 parser.add_argument('--overfit', action='store_true')
@@ -83,7 +88,7 @@ for i, config_yml in enumerate(args.config_ymls):
 
 	dataloader = DataLoader(
 			dataset,
-			batch_size=4,
+			batch_size=2,
 			num_workers=args.cpu_workers,
 			)
 	dataloaders.append(iter(dataloader))

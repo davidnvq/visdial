@@ -141,8 +141,8 @@ def load_checkpoint(checkpoint_pthpath, model, optimizer=None, device='cuda', re
 	if os.path.exists(checkpoint_pthpath) and os.path.isfile(checkpoint_pthpath):
 		components = torch.load(checkpoint_pthpath, map_location=device)
 		print("Loaded model from {}".format(checkpoint_pthpath))
-		print('At epoch:', components['epoch'])
-		print('Metrics score:', components['metrics'])
+		print('At epoch:', components.get('epoch'))
+		print('Metrics score:', components.get('metrics'))
 	else:
 		print("Can't load weight from {}".format(checkpoint_pthpath))
 		return model

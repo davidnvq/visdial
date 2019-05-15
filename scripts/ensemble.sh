@@ -9,7 +9,6 @@ CONFIG=$PATH_PROJ/configs/lf_disc_faster_rcnn_x101.yml
 python $PATH_PROJ/ensemble.py \
 --overfit \
 --split val \
---config-ymls $CONFIG $CONFIG \
 --json-dialogs $DATA/visdial_1.0_val.json \
 --json-dense $DATA/visdial_1.0_val_dense_annotations.json \
 --image-features-h5 $DATA/features_faster_rcnn_x101_val.h5 \
