@@ -63,7 +63,6 @@ def download_dataset(train=False):
 	if train is False:
 		file_paths = file_paths[:-2]
 		file_links = file_links[:-2]
-		print('this', len(file_paths))
 
 	for i in range(len(file_paths)):
 
@@ -79,6 +78,6 @@ def download_dataset(train=False):
 
 	for file in file_paths:
 		if 'zip' in file:
-			execute_cmd('unzip {}'.format(file))
+			execute_cmd('unzip {} -d {}'.format(file, os.path.dirname(file)))
 			execute_cmd('rm {}'.format(file))
 
