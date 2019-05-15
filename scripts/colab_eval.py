@@ -1,6 +1,7 @@
 import os
 import argparse
-from colab import *
+from .colab import *
+# TODO remove . in colab
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--overfit", action="store_true")

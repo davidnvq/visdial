@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bash /content/visdial/scripts/colab_eval_validation.sh
 
-SPLIT='test'
+SPLIT='val'
 ENCODER='lf'
 DECODER='disc'
 ROOT='/content'
