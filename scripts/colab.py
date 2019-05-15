@@ -1,10 +1,11 @@
 import os
 
 # TODO: Change ROOT, uncomment os.system(cmd)
+# TODO: Change PATH_PROJ
 
 ROOT = '/content'
 GDRIVE = os.path.join(ROOT, 'gdrive/My\ Drive')
-PATH_PROJ = os.path.join(ROOT, 'Dropbox/repos/visdial')
+PATH_PROJ = os.path.join(ROOT, 'visdial')
 
 
 def execute_cmd(cmd, verbose=True):
