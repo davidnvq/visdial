@@ -123,7 +123,7 @@ for i in range(len(dataloaders[0])):
 
 	for j, net in enumerate(models):
 		with torch.no_grad():
-			batch = next(dataloaders[i])
+			batch = next(dataloaders[j])
 			batch = move_to_cuda(batch, device)
 			output = net(batch)
 			output = torch.softmax(output, dim=-1)
