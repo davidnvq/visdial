@@ -61,7 +61,6 @@ for arg in vars(args):
 # =============================================================================
 #   SETUP DATASET, DATALOADER, MODEL
 # =============================================================================
-
 models = []
 dataloaders = []
 for i, config_yml in enumerate(args.config_ymls):
@@ -81,7 +80,7 @@ for i, config_yml in enumerate(args.config_ymls):
 
 	dataloader = DataLoader(
 			dataset,
-			batch_size=args.batch_size,
+			batch_size=1,
 			num_workers=args.cpu_workers,
 			)
 	dataloaders.append(iter(dataloader))
@@ -119,56 +118,53 @@ all_round_ids = []
 for i in range(len(dataloaders[0])):
 	print('batch index', i)
 
-	batch2 = next(dataloaders[1])
+	for j, net in enumerate(models):
+		with torch.no_grad():
+			batch = next(dataloaders[i])
+			batch = move_to_cuda(batch, device)
+			output = net(batch)
+			output = torch.softmax(output, dim=-1)
+			if j == 0:
+				cu_output = output
+			else:
+				cu_output += output
 
-	batch1 = move_to_cuda(batch1, device)
-	batch2 = move_to_cuda(batch2, device)
+	cu_output /= float(len(dataloaders)) # cummulative output
 
-	with torch.no_grad():
-		output1 = models[0](batch1)
-		output2 = models[1](batch2)
+	ranks = scores_to_ranks(cu_output)
 
-		output1 = torch.softmax(output1, dim=-1)
-		output2 = torch.softmax(output2, dim=-1)
-
-	output_a = (output1 + output2) / 2.0
-
-
-	ranks = scores_to_ranks(output_a)
-	all_outputs.append(output_a.cpu())
-	all_img_ids.append(batch1['img_ids'].cpu())
-	all_round_ids.append(batch1['num_rounds'].cpu())
-
-	for i in range(len(batch1["img_ids"])):
+	for i in range(len(batch["img_ids"])):
 		# Cast into types explicitly to ensure no errors in schema.
 		# Round ids are 1-10, not 0-9
 		if args.split == "test":
 			ranks_json.append(
 					{
-						"image_id": batch1["img_ids"][i].item(),
-						"round_id": int(batch1["num_rounds"][i].item()),
+						"image_id": batch["img_ids"][i].item(),
+						"round_id": int(batch["num_rounds"][i].item()),
 						"ranks"   : [
 							rank.item()
-							for rank in ranks[i][batch1["num_rounds"][i] - 1]
+							for rank in ranks[i][batch["num_rounds"][i] - 1]
 							],
 						}
 					)
 		else:
-			for j in range(batch1["num_rounds"][i]):
+			for j in range(batch["num_rounds"][i]):
 				ranks_json.append(
 						{
-							"image_id": batch1["img_ids"][i].item(),
+							"image_id": batch["img_ids"][i].item(),
 							"round_id": int(j + 1),
 							"ranks"   : [rank.item() for rank in ranks[i][j]],
 							}
 						)
 
 	if args.split == "val":
-		sparse_metrics_a.observe(output_a, batch1["ans_ind"])
+		sparse_metrics_a.observe(cu_output, batch["ans_ind"])
 
-		if "gt_relevance" in batch1:
-			output_a = output_a[torch.arange(output_a.size(0)), batch1["round_id"] - 1, :]
-			ndcg_a.observe(output_a, batch1["gt_relevance"])
+		if "gt_relevance" in batch:
+			cu_output = cu_output[torch.arange(cu_output.size(0)), batch["round_id"] - 1, :]
+			ndcg_a.observe(cu_output, batch["gt_relevance"])
+
+	torch.cuda.empty_cache()
 
 
 if args.split == "val":
@@ -182,6 +178,3 @@ print("Writing ranks to {}".format(args.save_ranks_path))
 os.makedirs(os.path.dirname(args.save_ranks_path), exist_ok=True)
 json.dump(ranks_json, open(args.save_ranks_path, "w"))
 
-output_path = ''.join(args.save_ranks_path.split('.')[:-1]) + '.pkl'
-with open(output_path, 'wb') as f:
-	pickle.dump([all_outputs, all_img_ids, all_round_ids], f)

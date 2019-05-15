@@ -314,7 +314,4 @@ with open(args.config_yml, 'r') as file:
 # 		torch.cuda.empty_cache()
 #
 # 	# Checkpoint
-# 	if (epoch + 1) % args.step_size == 0:
-# 		checkpoint_manager.step(epoch=epoch)
-# 	else:
-# 		checkpoint_manager.step(epoch=epoch, only_best=True, metrics=all_metrics)
+# 	checkpoint_manager.step(epoch=epoch, only_best=True, metrics=all_metrics)
