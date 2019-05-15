@@ -14,7 +14,7 @@ def execute_cmd(cmd, verbose=True):
 	os.system(cmd)
 
 def pull_project():
-	execute_cmd('cd /content/visdial; git pull https://github.com/quanguet/visdial.git --quiet')
+	execute_cmd('cd /content/visdial; git pull https://github.com/quanguet/visdial.git')
 
 
 def install_packages():
@@ -66,7 +66,7 @@ def download_dataset(train=False):
 
 		if not file_exists(file_paths[i]):
 			print('Downloading {}...'.format(file_paths[i]))
-			execute_cmd('wget -O {} {}'.format(file_paths[i], file_links[i]))
+			execute_cmd('wget {} --output-document={}'.format(file_links[i], file_paths[i]))
 			print('Finished downloading!\n')
 
 	for file in file_paths[-2:]:
