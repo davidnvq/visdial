@@ -35,9 +35,9 @@ parser.add_argument('--device', default='cuda')
 parser.add_argument('--json-dense', default='')
 parser.add_argument('--load-pthpaths', nargs='+', default=[CKPT1, CKPT2, CKPT3])
 parser.add_argument('--gpu-ids', default=[0], nargs='+', type=int)
-parser.add_argument('--cpu-workers', default=4, type=int)
+parser.add_argument('--cpu-workers', default=8, type=int)
 parser.add_argument('--overfit', action='store_true')
-parser.add_argument("--save-ranks-path", default='/content/gdrive/My Drive/checkpoints/ensemble.json')
+parser.add_argument("--save-ranks-path", default='/content/gdrive/My Drive/checkpoints/ensemble_test.json')
 
 # For reproducibility.
 # Refer https://pytorch.org/docs/stable/notes/randomness.html
