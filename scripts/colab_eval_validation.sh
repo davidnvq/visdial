@@ -8,7 +8,6 @@ ROOT='/content'
 PATH_PROJ=$ROOT/visdial
 
 python $PATH_PROJ/scripts/colab_eval.py \
---overfit \
 --gdrive \
 --split $SPLIT \
 --encoder $ENCODER \
