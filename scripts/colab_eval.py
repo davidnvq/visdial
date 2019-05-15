@@ -46,7 +46,6 @@ def get_other_arg_dict():
 
 	other_arg_dict = {
 		'gpu-ids'    : 0,
-		'step-size'  : 2,
 		'cpu-workers': 4,
 		'validate'   : True,
 		'config-yml' : config_yml,
