@@ -83,7 +83,7 @@ for i, config_yml in enumerate(args.config_ymls):
 
 	dataloader = DataLoader(
 			dataset,
-			batch_size=1,
+			batch_size=4,
 			num_workers=args.cpu_workers,
 			)
 	dataloaders.append(iter(dataloader))
