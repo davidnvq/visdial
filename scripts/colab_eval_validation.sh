@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # bash /content/visdial/scripts/colab_eval_validation.sh
 
-SPLIT='val'
+SPLIT='test'
 ENCODER='lf'
 DECODER='disc'
-python colab_eval.py \
+ROOT='/content'
+PATH_PROJ=$ROOT/visdial
+
+python $PATH_PROJ/scripts/colab_eval.py \
 --overfit \
 --gdrive \
 --split $SPLIT \
