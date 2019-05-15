@@ -2,7 +2,7 @@
 # To run:
 # bash /home/ubuntu/Dropbox/repos/visdial/scripts/dais_train_lf_disc.sh
 
-OVERFIT=true
+OVERFIT=false
 ROOT=/home/ubuntu
 DATASET=$ROOT/datasets/visdial
 CKPOINT=$ROOT/checkpoints/lf_disc
@@ -16,7 +16,7 @@ if [ $OVERFIT = true ]; then
     COMET=test
 else
     PATH_SAVE=$CKPOINT/may13
-    COMET=visdial_disc
+    COMET=visdial-disc
 fi
 
 FILE[1]=$DATASET/features_faster_rcnn_x101_train.h5
@@ -35,9 +35,9 @@ cp $PATH_PROJ/scripts/dais_train_lf_disc.sh $PATH_SAVE/
 # Overfit
 python $PATH_PROJ/train.py \
 --validate \
---gpu-ids 0 \
---cpu-workers 8 \
---batch-size 16 \
+--gpu-ids 0 1 \
+--cpu-workers 4 \
+--batch-size 30 \
 --num-epochs 15 \
 --lr 1e-3 \
 --step-size 2 \

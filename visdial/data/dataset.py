@@ -1,7 +1,6 @@
 from typing import Any, Dict, List, Optional
 import nltk
-
-nltk.download('punkt')
+nltk.data.path.append('/Users/quanguet/nltk_data')
 
 import torch
 from torch.nn.functional import normalize
