@@ -125,7 +125,7 @@ def update_weights(net, pretrained_dict):
 		]
 
 	for key in incompat_keys:
-		pretrained_dict[key] = torch.cat([pretrained_dict[key]] * 2, dim=-1)
+		pretrained_dict[key] = torch.cat([pretrained_dict[key] * 2], dim=-1)
 
 	model_dict.update(pretrained_dict)
 	net.load_state_dict(model_dict)
@@ -151,4 +151,7 @@ def load_checkpoint(checkpoint_pthpath, model, optimizer=None, device='cuda', re
 		return start_epoch, model, optimizer
 
 	else:
-		return update_weights(model, components["model"])
+		return model.load_state_dict(components["model"])
+
+	# else:
+	# 	return update_weights(model, components["model"])

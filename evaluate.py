@@ -82,7 +82,7 @@ dataset = VisDialDataset(
 dataloader = DataLoader(
 		dataset,
 		batch_size=args.batch_size,
-		num_workers=args.cpu_workers,
+		num_workers=args.cpu_workers
 		)
 
 # Pass vocabulary to construct Embedding layer.
