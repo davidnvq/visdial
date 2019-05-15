@@ -139,13 +139,15 @@ def load_checkpoint(checkpoint_pthpath, model, optimizer=None, device='cuda', re
 	if os.path.exists(checkpoint_pthpath) and os.path.isfile(checkpoint_pthpath):
 		components = torch.load(checkpoint_pthpath, map_location=device)
 		print("Loaded model from {}".format(checkpoint_pthpath))
+		print('At epoch:', components['epoch'])
+		print('Metrics score:', components['metrics'])
 	else:
 		print("Can't load weight from {}".format(checkpoint_pthpath))
 		return model
 
 	if resume:
 		# "path/to/checkpoint_xx.pth" -> xx
-		start_epoch = int(checkpoint_pthpath.split("_")[-1][:-4]) + 1
+		start_epoch = components['epoch']
 		model.load_state_dict(components["model"])
 		optimizer.load_state_dict(components["optimizer"])
 		return start_epoch, model, optimizer
