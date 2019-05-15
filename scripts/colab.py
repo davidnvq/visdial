@@ -32,8 +32,8 @@ def mount_gdrive():
 		raise ModuleNotFoundError
 
 
-def file_exists(file_path):
-	if os.path.exists(file_path):
+def file_exists(file_path, verbose=True):
+	if os.path.exists(file_path) and verbose:
 		print('{: <50}: exists!'.format(file_path))
 	return os.path.exists(file_path)
 
@@ -62,6 +62,8 @@ def download_dataset(train=False):
 
 	if train is False:
 		file_paths == file_paths[:-2]
+		for file_path in file_paths:
+			print('this', file_path)
 
 	for i in range(len(file_paths)):
 
