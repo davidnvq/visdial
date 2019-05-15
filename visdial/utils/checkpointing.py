@@ -151,7 +151,8 @@ def load_checkpoint(checkpoint_pthpath, model, optimizer=None, device='cuda', re
 		return start_epoch, model, optimizer
 
 	else:
-		return model.load_state_dict(components["model"])
+		model.load_state_dict(components["model"])
+		return model
 
 	# else:
 	# 	return update_weights(model, components["model"])
