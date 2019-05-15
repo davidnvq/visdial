@@ -52,19 +52,10 @@ torch.backends.cudnn.deterministic = True
 
 args = parser.parse_args()
 
-# keys: {"dataset", "model", "solver"}
-config = yaml.load(open(args.config_ymls[0]))
-
 if isinstance(args.gpu_ids, int):
 	args.gpu_ids = [args.gpu_ids]
 
 device = 'cuda'
-
-# Print config and args.
-print(yaml.dump(config, default_flow_style=False))
-
-for arg in vars(args):
-	print("{:<20}: {}".format(arg, getattr(args, arg)))
 
 # =============================================================================
 #   SETUP DATASET, DATALOADER, MODEL
@@ -72,7 +63,9 @@ for arg in vars(args):
 models = []
 dataloaders = []
 for i, config_yml in enumerate(args.config_ymls):
-	is_abtoks = True if config["model"]["decoder"] != "disc" else False
+	is_abtoks = True if config["model"]["decoder"] == "gen" else False
+	print('config_yml', config_yml)
+	print('is_abtoks', is_abtoks)
 
 	config = yaml.load(open(config_yml))
 	dataset = VisDialDataset(
