@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
+# bash /content/visdial/scripts/colab_eval_validation.sh
 
 SPLIT='val'
 ENCODER='lf'
-DECODER='attn'
-wcolab_eval.py \
+DECODER='disc'
+python colab_eval.py \
 --overfit \
 --gdrive \
 --split $SPLIT \
