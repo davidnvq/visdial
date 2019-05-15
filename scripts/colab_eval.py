@@ -81,7 +81,8 @@ def evaluate(args_dict):
 	for arg in args_dict:
 		value = args_dict[arg]
 		if isinstance(value, bool):
-			evaluate_cmd += f'--{arg} '
+			if arg is True:
+				evaluate_cmd += f'--{arg} '
 		else:
 			evaluate_cmd += f'--{arg} '
 			if isinstance(value, list):
