@@ -63,11 +63,8 @@ device = 'cuda'
 models = []
 dataloaders = []
 for i, config_yml in enumerate(args.config_ymls):
-	is_abtoks = True if config["model"]["decoder"] == "gen" else False
-	print('config_yml', config_yml)
-	print('is_abtoks', is_abtoks)
-
 	config = yaml.load(open(config_yml))
+	is_abtoks = True if config["model"]["decoder"] == "gen" else False
 	dataset = VisDialDataset(
 			config["dataset"],
 			jsonpath_dialogs=args.json_dialogs,
