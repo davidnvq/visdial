@@ -14,8 +14,7 @@ def execute_cmd(cmd, verbose=True):
 	os.system(cmd)
 
 def pull_project():
-	execute_cmd('cd /content/visdial')
-	execute_cmd('git pull https://github.com/quanguet/visdial.git --quiet')
+	execute_cmd('cd /content/visdial; git pull https://github.com/quanguet/visdial.git --quiet')
 
 
 def install_packages():
