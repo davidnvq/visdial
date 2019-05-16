@@ -35,7 +35,7 @@ parser.add_argument('--load-pthpaths', nargs='+', default=[CKPT2, CKPT3])
 parser.add_argument('--gpu-ids', default=[0], nargs='+', type=int)
 parser.add_argument('--cpu-workers', default=8, type=int)
 parser.add_argument('--overfit', action='store_true')
-parser.add_argument("--save-ranks-path", default='/content/gdrive/My Drive/checkpoints/ensemble_val_two.json')
+parser.add_argument("--save-ranks-path", default='/content/gdrive/My Drive/checkpoints/ensemble_test_two.json')
 
 # For reproducibility.
 # Refer https://pytorch.org/docs/stable/notes/randomness.html
