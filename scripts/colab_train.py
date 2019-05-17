@@ -83,7 +83,8 @@ def train(args_dict):
 	for arg in args_dict:
 		value = args_dict[arg]
 		if isinstance(value, bool):
-			train_cmd += f'--{arg} '
+			if value is True:
+				train_cmd += f'--{arg} '
 		else:
 			train_cmd += f'--{arg} '
 			if isinstance(value, list):
