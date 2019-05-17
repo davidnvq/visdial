@@ -1,4 +1,7 @@
 from comet_ml import Experiment
+import nltk
+nltk.download('punkt')
+
 import os
 import sys
 import yaml

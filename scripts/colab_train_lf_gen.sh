@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # To run:
 # ! git clone https://github.com/quanguet/visdial
-# ! cd /content/visidal;git pull https://github.com/quanguet/visdial
+# ! cd /content/visdial;git pull https://github.com/quanguet/visdial
 # ! bash /content/visdial/scripts/colab_train_lf_gen.sh
 
 # TODO: Rename ROOT
