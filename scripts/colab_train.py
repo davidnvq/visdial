@@ -8,7 +8,7 @@ parser.add_argument("--gdrive", action="store_true")
 parser.add_argument("--resume", action="store_true")
 parser.add_argument("--encoder", default="lf")
 parser.add_argument("--decoder", default="disc")
-parser.add_argument("--batch-size", default=16, type=int)
+parser.add_argument("--batch-size", default=8, type=int)
 parser.add_argument("--num-epochs", default=10, type=int)
 parser.add_argument("--lr", default=1e-4, type=float)
 parser.add_argument("--lr-steps", default=[5, ], nargs='+', type=int)
@@ -47,7 +47,7 @@ def get_other_arg_dict():
 		'comet-name' : comet_name,
 		'config-yml' : config_yml,
 		'overfit'    : args.overfit,
-		'lr'         : 1e-3,
+		'lr'         : 1e-4,
 		'lr-steps'   : args.lr_steps,
 		'num-epochs' : args.num_epochs,
 		'batch-size' : args.batch_size,

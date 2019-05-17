@@ -11,7 +11,7 @@ PATH_PROJ=$ROOT/visdial
 python $PATH_PROJ/scripts/colab_train.py \
 --gdrive \
 --num-epochs 10 \
---lr 5e-4 \
+--lr 1e-4 \
 --lr-steps 5 \
 --encoder 'lf' \
 --decoder 'gen' \
