@@ -149,6 +149,7 @@ def load_checkpoint(checkpoint_pthpath, model, optimizer=None, device='cuda', re
 
 	if resume:
 		# "path/to/checkpoint_xx.pth" -> xx
+		print('Resume training....')
 		start_epoch = components['epoch']
 		model.load_state_dict(components["model"])
 		optimizer.load_state_dict(components["optimizer"])

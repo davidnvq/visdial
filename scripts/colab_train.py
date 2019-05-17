@@ -10,12 +10,11 @@ parser.add_argument("--encoder", default="lf")
 parser.add_argument("--decoder", default="disc")
 parser.add_argument("--batch-size", default=16, type=int)
 parser.add_argument("--num-epochs", default=10, type=int)
-parser.add_argument("--lr", default=1e-3, type=float)
+parser.add_argument("--lr", default=1e-4, type=float)
 parser.add_argument("--lr-steps", default=[5, ], nargs='+', type=int)
 parser.add_argument("--ckpt-path", default="")
 parser.add_argument("--load-pthpath", default="")
 args = parser.parse_args()
-
 
 def get_data_path_dict():
 	data_names = {
@@ -97,8 +96,7 @@ def train(args_dict):
 
 if __name__ == '__main__':
 	install_packages()
-	pull_project()
-
+	# pull_project()
 	args_dict = get_args_dict()
-	download_dataset()
+	download_dataset(train=True)
 	train(args_dict)

@@ -7,7 +7,7 @@ ROOT=/home/ubuntu
 DATASET=$ROOT/datasets/visdial
 CKPOINT=$ROOT/checkpoints/lf_disc
 
-PATH_LOAD=$CKPOINT/lf_disc_faster_rcnn_x101_trainval.pth
+PATH_LOAD=$CKPOINT/may13/checkpoint_best_ndcg.pth
 PATH_PROJ=$ROOT/Dropbox/repos/visdial
 CONFIG=$PATH_PROJ/configs/lf_disc_faster_rcnn_x101.yml
 
@@ -15,7 +15,7 @@ if [ $OVERFIT = true ]; then
     PATH_SAVE=$CKPOINT/tmp
     COMET=test
 else
-    PATH_SAVE=$CKPOINT/may13
+    PATH_SAVE=$CKPOINT/may17
     COMET=visdial-disc
 fi
 
@@ -35,12 +35,13 @@ cp $PATH_PROJ/scripts/dais_train_lf_disc.sh $PATH_SAVE/
 # Overfit
 python $PATH_PROJ/train.py \
 --validate \
+--resume \
 --gpu-ids 0 1 \
 --cpu-workers 4 \
 --batch-size 30 \
 --num-epochs 15 \
 --lr 1e-3 \
---step-size 2 \
+--step-size 1 \
 --comet-name $COMET \
 --config-yml $CONFIG \
 --image-features-tr-h5 ${FILE[1]} \
@@ -49,6 +50,7 @@ python $PATH_PROJ/train.py \
 --json-train ${FILE[4]} \
 --json-val ${FILE[5]} \
 --json-val-dense ${FILE[6]} \
+--load-pthpath $PATH_LOAD \
 --save-dirpath $PATH_SAVE \
 
 echo $PATH_SAVE
