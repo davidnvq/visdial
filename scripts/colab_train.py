@@ -95,6 +95,7 @@ def train(args_dict):
 
 
 if __name__ == '__main__':
+	mount_gdrive()
 	install_packages()
 	# pull_project()
 	args_dict = get_args_dict()

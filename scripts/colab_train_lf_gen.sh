@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # To run:
-# bash /content/visdial/scripts/colab_train_lf_gen.sh
-ROOT='/Users/quanguet'
-PATH_PROJ=$ROOT/Dropbox/repos/visdial
+# ! git clone https://github.com/quanguet/visdial
+# ! cd /content/visidal;git pull https://github.com/quanguet/visdial
+# ! bash /content/visdial/scripts/colab_train_lf_gen.sh
+
+# TODO: Rename ROOT
+ROOT='/content'
+PATH_PROJ=$ROOT/visdial
 
 python $PATH_PROJ/scripts/colab_train.py \
 --gdrive \
