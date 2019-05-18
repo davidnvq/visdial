@@ -1,3 +1,7 @@
+from comet_ml import Experiment
+import nltk
+nltk.download('punkt')
+
 import os
 import json
 import yaml
@@ -16,6 +20,11 @@ from visdial.data.dataset import VisDialDataset
 from visdial.utils.checkpointing import load_checkpoint
 from visdial.utils import move_to_cuda
 from visdial.metrics import SparseGTMetrics, NDCG, scores_to_ranks
+
+# Add the following code anywhere in your machine learning file
+experiment = Experiment(api_key='2z9VHjswAJWF1TV6x4WcFMVss',
+                        project_name='visdial-disc', workspace="lightcv")
+
 
 CKPT0='/content/gdrive/My Drive/checkpoints/lf_disc/may13/checkpoint_best_ndcg.pth'
 CKPT1='/content/gdrive/My Drive/checkpoints/lf_disc/may13/checkpoint_last.pth'
