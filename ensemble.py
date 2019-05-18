@@ -17,8 +17,8 @@ from visdial.utils.checkpointing import load_checkpoint
 from visdial.utils import move_to_cuda
 from visdial.metrics import SparseGTMetrics, NDCG, scores_to_ranks
 
-CKPT0='/content/gdrive/My Drive/checkpoints/lf_disc/may13/checkpoint_best_mean.pth'
-CKPT1='/content/gdrive/My Drive/checkpoints/lf_disc/may13/checkpoint_best_mean.pth'
+CKPT0='/content/gdrive/My Drive/checkpoints/lf_disc/may13/checkpoint_best_ndcg.pth'
+CKPT1='/content/gdrive/My Drive/checkpoints/lf_disc/may13/checkpoint_last.pth'
 CKPT2='/content/gdrive/My Drive/checkpoints/lf_disc/may13/checkpoint_best_mean.pth'
 CKPT3='/content/gdrive/My Drive/checkpoints/lf_gen/may14/checkpoint_9.pth'
 

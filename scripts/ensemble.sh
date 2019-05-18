@@ -19,7 +19,7 @@ SPLIT='test'
 ROOT='/content'
 PATH_PROJ=$ROOT/visdial
 DATA=$ROOT/datasets/visdial
-CONFIG=$PATH_PROJ/configs/lf_disc_faster_rcnn_x101.yml
+
 
 python $PATH_PROJ/ensemble.py \
 --split $SPLIT \
