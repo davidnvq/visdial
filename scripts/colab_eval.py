@@ -99,4 +99,4 @@ if __name__ == '__main__':
 	mount_gdrive()
 	args_dict = get_args_dict()
 	download_dataset()
-	evaluate(args_dict)
+	# evaluate(args_dict)

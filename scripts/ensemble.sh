@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+#!git clone https://github.com/quanguet/visdial
+#!bash /content/visdial/scripts/ensemble.sh
+
 
 #SPLIT='val'
 #ROOT='/content'
