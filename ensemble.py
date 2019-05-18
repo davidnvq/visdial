@@ -130,6 +130,7 @@ for i in range(len(dataloaders[0])):
 		with torch.no_grad():
 			batch = next(dataloaders[j])
 			batch = move_to_cuda(batch, device)
+
 			output = net(batch)
 			output = torch.softmax(output, dim=-1)
 			if j == 0:
