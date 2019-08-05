@@ -34,7 +34,6 @@ MANIFEST
 
 
 # Datasets, pretrained models, checkpoints and preprocessed files
-data/
 !visdial/data/
 checkpoints/
 logs/
