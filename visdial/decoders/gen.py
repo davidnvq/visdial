@@ -1,120 +1,96 @@
 import torch
 from torch import nn
 
+class GenDecoder(nn.Module):
 
-class GenerativeDecoder(nn.Module):
-	def __init__(self, config, vocabulary):
-		super().__init__()
-		self.config = config
+    def __init__(self, hidden_size, vocab_size, num_lstm_layers, dropout, **kwargs):
 
-		self.word_embed = nn.Embedding(
-				len(vocabulary),
-				config["word_embedding_size"],
-				padding_idx=vocabulary.PAD_INDEX,
-				)
-		self.answer_rnn = nn.LSTM(
-				config["word_embedding_size"],
-				config["lstm_hidden_size"],
-				config["lstm_num_layers"],
-				batch_first=True,
-				dropout=config["dropout"],
-				)
+        super(GenDecoder, self).__init__()
+        self.ans_rnn = nn.LSTM(hidden_size,
+                               hidden_size,
+                               num_layers=num_lstm_layers,
+                               batch_first=True,
+                               dropout=dropout)
+        self.lstm_to_words = nn.Linear(hidden_size, vocab_size)
+        self.dropout = nn.Dropout(dropout)
+        self.logsoftmax = nn.LogSoftmax(dim=-1)
 
-		self.lstm_to_words = nn.Linear(
-				self.config["lstm_hidden_size"], len(vocabulary)
-				)
 
-		self.dropout = nn.Dropout(p=config["dropout"])
-		self.logsoftmax = nn.LogSoftmax(dim=-1)
+    def forward(self, batch, ans_in_embed, encoder_out):
+        """
+        :param answer_embed: shape [bs, num_hist, max_seq_len, hidden_size]
+        :param encoder_out:  shape [bs * num_hist, hidden_size]
+        :return:
+        """
+        self.ans_rnn.flatten_parameters()
+        num_lstm_layers = self.ans_rnn.num_layers
 
-	def forward(self, encoder_output, batch):
-		"""Given `encoder_output`, learn to autoregressively predict
-		ground-truth answer word-by-word during training.
+        if self.training: # training
+            print("ans_in_embed", ans_in_embed.size())
 
-		During evaluation, assign log-likelihood scores to all answer options.
+            bs, num_hist, max_seq_len, hidden_size = ans_in_embed.size()
 
-		Parameters
-		----------
-		encoder_output: torch.Tensor
-			Output from the encoder through its forward pass.
-			(batch_size, num_rounds, lstm_hidden_size)
-		"""
-		# make it single contiguous chunk of memory
-		self.answer_rnn.flatten_parameters()
+            ans_in_embed = ans_in_embed.view(bs * num_hist, max_seq_len, hidden_size)
 
-		if self.training:
-			# shape: [BS, NR, SEQ]
-			ans_in = batch["ans_in"]
-			(BS, NR, SEQ), HS = ans_in.size(), self.config['lstm_hidden_size']
+            # shape [lstm_layers, bs * num_hist, hidden_size]
+            init_hidden = encoder_out.view(1,
+                                           bs * num_hist,
+                                           hidden_size).repeat(num_lstm_layers, 1, 1)
+            print("init_hidden0", init_hidden.size())
 
-			# shape: [BS x NR, SEQ]
-			ans_in = ans_in.view(BS * NR, SEQ)
+            init_cell = torch.zeros_like(init_hidden)
 
-			# shape: [BS x NR, SEQ, WE]
-			ans_in_embed = self.word_embed(ans_in)
+            # shape [bs * num_hist, max_seq_len, hidden_size]
+            ans_out, (_, _) = self.ans_rnn(ans_in_embed, (init_hidden, init_cell))
 
-			# reshape encoder output to be set as initial hidden state of LSTM.
-			# shape: [lstm_layers, BS x NR, HS]
-			init_hidden = encoder_output.view(1, BS * NR, -1).repeat(self.config['lstm_num_layers'], 1, 1)
+            ans_out = self.dropout(ans_out)
+            ans_word_scores = self.lstm_to_words(ans_out)
+            return ans_word_scores
 
-			init_cell = torch.zeros_like(init_hidden)
+        else: # validation and testing
+            bs, num_hist, num_opts, max_seq_len, hidden_size = ans_in_embed.size()
+            # shape [bs, num_hist, num_opts, max_seq_len, hidden_size]
+            opts_in = ans_in_embed
 
-			# shape: [BS x NR, SEQ, HS]
-			ans_out, (_, _) = self.answer_rnn(ans_in_embed, (init_hidden, init_cell))
-			ans_out = self.dropout(ans_out)
+            # shape [bs * num_hist * num_opts, max_seq_len, hidden_size]
+            opts_in = opts_in.view(bs * num_hist * num_opts, max_seq_len, hidden_size)
 
-			# shape: [BS x NR, SEQ, VC]
-			ans_word_scores = self.lstm_to_words(ans_out)
-			return ans_word_scores
+            # shape [bs, num_hist, 1, hidden_size]
+            init_hidden = encoder_out.view(bs, num_hist, 1, -1)
+            print("init_hidden1", init_hidden.size())
 
-		else:
-			# shape: [BS, NR, NO, SEQ]
-			ans_in = batch["opt_in"]
-			BS, NR, NO, SEQ = ans_in.size()
+            # shape [bs, num_hist, num_opts, hidden_size]
+            init_hidden = init_hidden.repeat(1, 1, num_opts, 1)
+            print("init_hidden2", init_hidden.size())
 
-			# shape: [BS x NR x NO, SEQ]
-			ans_in = ans_in.view(BS * NR * NO, SEQ)
+            # shape [lstm_layers, bs * num_hist * num_opts, hidden_size]
+            init_hidden = init_hidden.view(1,
+                                           bs * num_hist * num_opts,
+                                           hidden_size)
+            print("init_hidden3", init_hidden.size())
 
-			# shape: [BS x NR x NO, WE]
-			ans_in_embed = self.word_embed(ans_in)
+            init_hidden = init_hidden.repeat(num_lstm_layers, 1, 1)
+            print("init_hidden4", init_hidden.size())
 
-			# reshape encoder output to be set as initial hidden state of LSTM.
+            init_cell = torch.zeros_like(init_hidden)
 
-			# shape: [BS, NR, 1, HS]
-			init_hidden = encoder_output.view(BS, NR, 1, -1)
+            # shape [bs * num_hist * num_opts, max_seq_len, hidden_size]
+            opts_out, (_, _) = self.ans_rnn(opts_in, (init_hidden, init_cell))
 
-			# shape: [BS, NR, NO, HS]
-			init_hidden = init_hidden.repeat(1, 1, NO, 1)
+            # shape [bs * num_hist * num_opts, max_seq_len, vocab_size]
+            opts_out_scores = self.logsoftmax(self.lstm_to_words(opts_out))
 
-			# shape: [1, BS x NR x NO, HS]
-			init_hidden = init_hidden.view(1, BS * NR * NO, -1)
+            # shape [bs * num_hist * num_opts, max_seq_len]
+            target_opts_out = batch['opts_out'].view(bs * num_hist * num_opts, -1)
 
-			# shape: [lstm_layers, BS x NR x NO, HS]
-			init_hidden = init_hidden.repeat(self.config["lstm_num_layers"], 1, 1)
+            # shape [bs * num_hist * num_opts, max_seq_len]
+            target_opts_out = torch.gather(opts_out_scores, -1, target_opts_out.unsqueeze(-1)).squeeze()
+            # ^ select the scores for target word in [vocab vector] of each word
 
-			init_cell = torch.zeros_like(init_hidden)
+            # shape [bs * num_hist * num_opts, max_seq_len] <- remove <PAD> token
+            opts_out_scores = (opts_out_scores * (target_opts_out > 0).float())#.cuda()
 
-			# shape: [BS x NR x NO, SEQ, HS]
-			ans_out, (_, _) = self.answer_rnn(ans_in_embed, (init_hidden, init_cell))
-
-			# shape: [BS x NR x NO, SEQ, VC]
-			ans_word_scores = self.logsoftmax(self.lstm_to_words(ans_out))
-
-			# shape: [BS x NR x NO, SEQ]
-			target_ans_out = batch["opt_out"].view(BS * NR * NO, -1)
-
-			# shape: [BS x NR x NO, SEQ]
-			ans_word_scores = torch.gather(ans_word_scores, -1, target_ans_out.unsqueeze(-1)).squeeze()
-			# ^ select the scores for target word in [vocab vector] of each word
-
-			# shape: [BS x NR x NO, SEQ] <- remove the <PAD> word
-			ans_word_scores = (ans_word_scores * (target_ans_out > 0).float().cuda())
-
-			# sum all the scores for each word in the predicted answer -> final score
-			# shape: [BS x NR x NO]
-			ans_scores = torch.sum(ans_word_scores, dim=-1)
-
-			# shape: [BS, NR, NO]
-			ans_scores = ans_scores.view(BS, NR, NO)
-
-			return ans_scores
+            # sum all the scores for each word in the predicted answer -> final score
+            # shape [bs * num_hist * num_opts]
+            opts_out_scores = opts_out_scores.view(bs * num_hist, num_opts)
+            return opts_out_scores

@@ -22,7 +22,7 @@ dialog_for_image = copy.deepcopy(self.dialogs[image_id])
 
 ```
 """
-
+import nltk
 import copy
 import json
 from typing import Dict, List, Union
@@ -32,9 +32,10 @@ import h5py
 # A bit slow, and just splits sentences to list of words, can be doable in
 # `DialogsReader`.
 from nltk.tokenize import word_tokenize
+from pytorch_pretrained_bert import BertTokenizer
 from tqdm import tqdm
 import os
-
+from nltk.tokenize import word_tokenize
 
 class DialogsReader(object):
 	"""
@@ -47,11 +48,16 @@ class DialogsReader(object):
 		Path to json file containing VisDial v1.0 train, val or test data.
 	"""
 
-	def __init__(self, dialogs_jsonpath: str):
-		if '~' in dialogs_jsonpath:
-			dialogs_jsonpath = os.path.expanduser(dialogs_jsonpath)
+	def __init__(self, config, split='train'):
+		if config['model']['tokenizer'] == 'nlp':
+			self.tokenize = word_tokenize
+		elif config['model']['tokenizer'] == 'bert':
+			self.tokenize = BertTokenizer.from_pretrained('bert-base-uncased').tokenize
 
-		with open(dialogs_jsonpath, "r") as visdial_file:
+		self.config = config
+		path_json_dialogs = config['dataset'][split]['path_json_dialogs']
+
+		with open(path_json_dialogs, "r") as visdial_file:
 			visdial_data = json.load(visdial_file)
 			self._split = visdial_data["split"]
 
@@ -92,25 +98,27 @@ class DialogsReader(object):
 					if "answer" not in dialog_for_image["dialog"][i]:
 						dialog_for_image["dialog"][i]["answer"] = -1
 					if "answer_options" not in dialog_for_image["dialog"][i]:
-						dialog_for_image["dialog"][i]["answer_options"] = [
-							                                                  -1
-							                                                  ] * 100
+						dialog_for_image["dialog"][i]["answer_options"] = [-1] * 100
 
-				self.dialogs[dialog_for_image["image_id"]] = dialog_for_image[
-					"dialog"
-				]
+				self.dialogs[dialog_for_image["image_id"]] = dialog_for_image["dialog"]
 
 			print(f"[{self._split}] Tokenizing questions...")
 			for i in tqdm(range(len(self.questions))):
-				self.questions[i] = word_tokenize(self.questions[i] + "?")
+				self.questions[i] = self.do_tokenize(self.questions[i] + "?")
 
 			print(f"[{self._split}] Tokenizing answers...")
 			for i in tqdm(range(len(self.answers))):
-				self.answers[i] = word_tokenize(self.answers[i])
+				self.answers[i] = self.do_tokenize(self.answers[i])
 
 			print(f"[{self._split}] Tokenizing captions...")
 			for image_id, caption in tqdm(self.captions.items()):
-				self.captions[image_id] = word_tokenize(caption)
+				self.captions[image_id] = self.do_tokenize(caption)
+
+		if config['model']['tokenizer'] == 'bert':
+			path_feat_questions = config['dataset'][split]['path_feat_questions']
+			path_feat_history = config['dataset'][split]['path_feat_history']
+			self.question_reader = QuestionFeatureReader(path_feat_questions)
+			self.history_reader = HistoryFeatureReader(path_feat_history)
 
 	def __len__(self):
 		return len(self.dialogs)
@@ -121,27 +129,63 @@ class DialogsReader(object):
 		num_rounds = self.num_rounds[image_id]
 
 		# Replace question and answer indices with actual word tokens.
-		for i in range(len(dialog_for_image)):
-			dialog_for_image[i]["question"] = self.questions[
-				dialog_for_image[i]["question"]
-			]
-			dialog_for_image[i]["answer"] = self.answers[
-				dialog_for_image[i]["answer"]
-			]
+		dialog_for_image = self.replace_ids_by_tokens(
+				dialog_for_image,
+				keys=['question', 'answer', 'answer_options'])
 
-			for j, answer_option in enumerate(
-					dialog_for_image[i]["answer_options"]
-					):
-				dialog_for_image[i]["answer_options"][j] = self.answers[
-					answer_option
-				]
-
-		return {
-			"image_id"  : image_id,
+		item = {
+			'image_id'  : image_id,
+			'num_rounds': num_rounds,  # 10
 			"caption"   : caption_for_image,
 			"dialog"    : dialog_for_image,
-			"num_rounds": num_rounds,
 			}
+
+		if self.config['model']['tokenizer'] == 'bert':
+			# Replace question and answer indices with actual word tokens.
+			dialog_for_image = self.replace_ids_by_tokens(
+					dialog_for_image,
+					keys=['answer', 'answer_options'])
+
+			ques_feats = []
+			ques_masks = []
+			for i in range(len(dialog_for_image)):
+				ques = self.question_reader[dialog_for_image[i]['question']]
+				question_feature, question_mask = ques
+				ques_feats.append(question_feature)
+				ques_masks.append(question_mask)
+
+			hist_feats = self.history_reader[image_id]
+
+			bert_return = {
+				'ques_feats': ques_feats,  # shape [10, 23, 768]
+				'ques_masks': ques_masks,  # shape [10, 23]
+				'hist_feats': hist_feats,  # shape [11, 768]
+				'dialog'    : dialog_for_image
+				}
+			item.update(bert_return)
+
+		return item
+
+	def do_tokenize(self, text):
+		tokenized_text = self.tokenize(text)
+		return tokenized_text
+
+
+	def replace_ids_by_tokens(self,
+	                          dialog_for_image,
+	                          keys=['question', 'answer', 'answer_options']):
+		for dialog_round in dialog_for_image:
+			for key in keys:
+				if key == 'answer_options':
+					for i, ans_opt in enumerate(dialog_round[key]):
+						dialog_round[key][i] = self.answers[ans_opt]
+				elif key == 'answer':
+					dialog_round[key] = self.answers[dialog_round[key]]
+				elif key == 'question':
+					dialog_round[key] = self.questions[dialog_round[key]]
+
+		return dialog_for_image
+
 
 	def keys(self) -> List[int]:
 		return list(self.dialogs.keys())
@@ -149,6 +193,38 @@ class DialogsReader(object):
 	@property
 	def split(self):
 		return self._split
+
+
+def test_dialogs_reader(split='val'):
+	with open('/home/ubuntu/Dropbox/repos/visdial/configs/lf_disc.json', 'r') as f:
+		config = json.load(f)
+
+	train_img_ids = [378466, 575029]
+	val_img_ids = [185565, 284024]
+
+	dialogs_reader = DialogsReader(config, split=split)
+	dialog_instance = dialogs_reader[val_img_ids[0]]
+	for key in dialog_instance:
+		print(key)
+
+	assert dialog_instance['image_id'] == val_img_ids[0]
+	assert dialog_instance['num_rounds'] == 10
+
+	if config['model']['encoder']['txt_embeddings']['type'] == 'lstm':
+		print(dialog_instance['caption'])
+
+	elif config['model']['encoder']['txt_embeddings']['type'] == 'bert':
+		for question_mask in dialog_instance['question_masks']:
+			print('question_mask', question_mask)
+			print('question_mask', question_mask.dtype)
+			assert question_mask.shape == (23,)
+
+		assert dialog_instance['question_features'][0].shape == (23, 768)
+		print('question_feature', dialog_instance['question_features'][0].dtype)
+
+		print('history_feature', dialog_instance['history_feature'].shape)
+		print('history_feature', dialog_instance['history_feature'].dtype)
+		assert dialog_instance['history_feature'].shape == (11, 768)
 
 
 class DenseAnnotationsReader(object):
@@ -184,6 +260,78 @@ class DenseAnnotationsReader(object):
 	def split(self):
 		# always
 		return "val"
+
+
+class HistoryFeatureReader(object):
+	def __init__(self, path_hdf_hist):
+		self.path_hdf_hist = path_hdf_hist
+		with h5py.File(path_hdf_hist, 'r') as features_hdf:
+			self.image_ids = list(features_hdf['image_ids'])
+
+	def __len__(self):
+		return len(self.image_ids)
+
+	def __getitem__(self, image_id):
+		index = self.image_ids.index(image_id)
+		with h5py.File(self.path_hdf_hist, 'r') as features_hdf:
+			history_feature = features_hdf['features'][index]
+
+		return history_feature
+
+
+def test_history_feature_reader(hist_file='features_bert_val_history.h5', num_images=2064):
+	import numpy as np
+
+	path_hdf_hist = '/home/ubuntu/datasets/visdial/' + hist_file
+	hist_reader = HistoryFeatureReader(path_hdf_hist)
+	assert len(hist_reader) == num_images
+
+	history_feature0 = hist_reader[hist_reader.image_ids[0]]
+	print('history_feature shape', history_feature0.shape)
+	assert history_feature0.shape == (11, 768)
+
+	history_feature1 = hist_reader[hist_reader.image_ids[1]]
+	assert id(history_feature0) != id(history_feature1)
+	assert np.array_equal(history_feature0, history_feature1) == False
+
+
+class QuestionFeatureReader(object):
+
+	def __init__(self, path_hdf_ques):
+		self.path_hdf_ques = path_hdf_ques
+		with h5py.File(self.path_hdf_ques, 'r') as hdf:
+			self.num_questions = hdf.attrs['num_questions']
+
+	def __len__(self):
+		return self.num_questions
+
+
+	def __getitem__(self, question_id):
+		if not os.path.isfile(self.path_hdf_ques):
+			return None
+
+		with h5py.File(self.path_hdf_ques, 'r') as hdf:
+			question_feature = hdf['features'][question_id]
+			question_mask = hdf['masks'][question_id]
+		return question_feature, question_mask
+
+
+def test_question_feature_reader():
+	import numpy as np
+
+	path_hdf_question = '/home/ubuntu/datasets/visdial/features_bert_val_questions.h5'
+	ques_reader = QuestionFeatureReader(path_hdf_question)
+	assert len(ques_reader) == 45237
+
+	question_feature0, question_mask0 = ques_reader[0]
+	assert question_feature0.shape == (23, 768)
+	assert question_mask0.shape == (23,)
+
+	question_feature1, question_mask1 = ques_reader[1]
+	assert id(question_feature0) != id(question_feature1)
+	assert np.array_equal(question_feature0, question_feature1) == False
+	print('question_mask0', question_mask0)
+	print('question_mask1', question_mask1)
 
 
 class ImageFeaturesHdfReader(object):

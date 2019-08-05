@@ -1,0 +1,1 @@
+from visdial.common.transformer.text_encoder import get_transformer_encoder

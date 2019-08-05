@@ -1,322 +1,348 @@
-from comet_ml import Experiment
-import nltk
-nltk.download('punkt')
+from comet_ml import Experiment, OfflineExperiment
+from tensorboardX import SummaryWriter
 
 import os
 import sys
-import yaml
 import torch
 import random
+import logging
 import argparse
-import itertools
 import numpy as np
 from tqdm import tqdm
+from glob import glob
 from torch import nn, optim
-from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
-from visdial.encoders import Encoder
-from visdial.decoders import Decoder
-from visdial.model import EncoderDecoderModel
-from visdial.loss import get_criterion
+from visdial.model import get_model
 from visdial.data.dataset import VisDialDataset
-from visdial.metrics import SparseGTMetrics, NDCG, Monitor
-from visdial.utils.checkpointing import CheckpointManager, load_checkpoint
+from visdial.metrics import SparseGTMetrics, NDCG
+from visdial.utils.checkpointing import CheckpointManager, load_checkpoint_from_config
 from visdial.utils import move_to_cuda
+
+log_format = '%(asctime)s %(message)s'
+logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+    format=log_format, datefmt='%m/%d %I:%M:%S %p')
+
+
+def get_comet_experiment(config, is_online=False, offline_dir=None):
+    if is_online:
+        return Experiment(api_key='2z9VHjswAJWF1TV6x4WcFMVss',
+                          project_name=config['comet_project'],
+                          workspace='lightcv')
+    else:
+        return OfflineExperiment(
+            project_name=config['comet_project'],
+            workspace='lightcv',
+            offline_directory=offline_dir)
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--image-features-tr-h5", default="")
-parser.add_argument("--image-features-va-h5", default="")
-parser.add_argument("--image-features-te-h5", default="")
-parser.add_argument("--json-word-counts", default="")
-parser.add_argument("--lr", default=1e-2, type=float)
-parser.add_argument("--num-epochs", default=20, type=int)
-parser.add_argument("--batch-size", default=16, type=int)
-parser.add_argument("--in-memory", action="store_true")
-parser.add_argument("--validate", action="store_true")
-parser.add_argument("--overfit", action="store_true")
-parser.add_argument("--gpu-ids", nargs="+", default=0, type=int)
-parser.add_argument("--lr-steps", nargs="+", default=[5, ], type=int)
-parser.add_argument("--cpu-workers", default=4, type=int)
-parser.add_argument("--seed", default=0, type=int)
-parser.add_argument("--config-yml", default="")
-parser.add_argument("--comet-name", default="")
-parser.add_argument("--json-train", default="")
-parser.add_argument("--json-val", default="")
-parser.add_argument("--json-val-dense", default="")
-parser.add_argument("--save-dirpath", default="")
-parser.add_argument("--device", default="cuda")
-parser.add_argument("--step-size", default=10, type=int)
-parser.add_argument("--load-pthpath", default="")
-parser.add_argument("--resume", action="store_true")
-
+parser.add_argument("--config", default="attn_disc_lstm")
+parser.add_argument('--online', action='store_true')
 args = parser.parse_args()
 
 # =============================================================================
-#   INPUT ARGUMENTS AND CONFIG
+#   INPUT ARGUMENTS AND CONFIG AND PARAMS
 # =============================================================================
 
-# keys: {"dataset", "model", "solver"}
-with open(args.config_yml, 'r') as file:
-	config = yaml.load(file)
+from configs import get_config
 
-# Add the following code anywhere in your machine learning file
-experiment = Experiment(api_key='2z9VHjswAJWF1TV6x4WcFMVss',
-                        project_name=args.comet_name, workspace="lightcv")
+config = get_config(config_name=args.config)
 
-experiment.log_asset(args.config_yml)
+save_dirpath = config['callbacks']['path_dir_save_ckpt']
+log_path = save_dirpath + '/log'
+logging.info(f"log_path: {log_path}")
+
+
+os.makedirs(log_path, exist_ok=True)
+
+experiment = get_comet_experiment(config, args.online, log_path)
+
+for key in config:
+    if not isinstance(config[key], dict):
+        experiment.log_parameter(key, config[key])
+
 
 for key in ['model', 'solver']:
-	experiment.log_parameters(config[key])
+    experiment.log_parameters(config[key])
+
+# =============================================================================
+# ZIPPING PROJECTS
+# =============================================================================
+logging.info("Start zipping project...")
+os.system(f"zip -r -uq  {args.config}.zip /home/quang/repos/visdial -x '*.git*' '*.ipynb_checkpoints*' '*.idea*' '*__pycache__*' ")
+experiment.log_asset(f"{args.config}.zip")
+os.system(f"rm {args.config}.zip")
+logging.info("Done zipping!")
 
 
 # =============================================================================
 # For reproducibility.
 # =============================================================================
-# Refer https://pytorch.org/docs/stable/notes/randomness.html
+seed = config['seed']
 
-def seed_torch(seed=0):
-	random.seed(seed)
-	np.random.seed(seed)
-	torch.manual_seed(seed)
-	torch.cuda.manual_seed(seed)
-	torch.cuda.manual_seed_all(seed)
-	torch.backends.cudnn.benchmark = False
-	torch.backends.cudnn.deterministic = True
-	os.environ['PYTHONHASHSEED'] = str(seed)
-
-	def worker_init_fn(worker_id):
-		np.random.seed(seed + worker_id)
-
-	return worker_init_fn
-
-
-init_fn = seed_torch(args.seed)
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
+os.environ['PYTHONHASHSEED'] = str(seed)
 
 # =============================================================================
 #   SETUP DATASET, DATALOADER, MODEL, CRITERION, OPTIMIZER, SCHEDULER
 # =============================================================================
 
-is_abtoks = True if config["model"]["decoder"] != "disc" else False
-is_return = True if config["model"]["decoder"] == "disc" else False
+logging.info(f"CUDA number: {torch.cuda.device_count()}")
 
-# TODO: Comment this overfit test
+"""DATASET INIT"""
+logging.info("Loading train dataset...")
+train_dataset = VisDialDataset(config, split='train')
 
-train_dataset = VisDialDataset(
-		config["dataset"],
-		jsonpath_dialogs=args.json_train,
-		hdfpath_img_features=args.image_features_tr_h5,
-		jsonpath_vocab=args.json_word_counts,
-		overfit=args.overfit,
-		return_options=is_return,
-		add_boundary_toks=is_abtoks,
-		)
+train_dataloader = DataLoader(train_dataset,
+                              batch_size=config['solver']['batch_size'] * torch.cuda.device_count(),
+                              num_workers=config['dataset']['cpu_workers'],
+                              shuffle=True)
 
-train_dataloader = DataLoader(
-		train_dataset,
-		batch_size=args.batch_size,
-		num_workers=args.cpu_workers,
-		shuffle=True,
-		worker_init_fn=init_fn
-		)
+logging.info("Loading val dataset...")
+val_dataset = VisDialDataset(config, split='val')
 
-val_dataset = VisDialDataset(
-		config["dataset"],
-		jsonpath_dialogs=args.json_val,
-		jsonpath_vocab=args.json_word_counts,
-		jsonpath_dense=args.json_val_dense,
-		hdfpath_img_features=args.image_features_va_h5,
-		overfit=args.overfit,
-		return_options=True,
-		add_boundary_toks=is_abtoks,
-		)
+val_dataloader = DataLoader(val_dataset,
+                            batch_size=2 * torch.cuda.device_count(),
+                            num_workers=config['dataset']['cpu_workers'])
 
-val_dataloader = DataLoader(
-		val_dataset,
-		batch_size=4,
-		num_workers=args.cpu_workers,
-		worker_init_fn=init_fn
-		)
 
-# # TODO: Uncomment this overfit test
-# train_dataset = val_dataset
-# train_dataloader = val_dataloader
-
-# Pass vocabulary to construct Embedding layer.
-print("Encoder: {}".format(config["model"]["encoder"]))
-print("Decoder: {}".format(config["model"]["decoder"]))
-
-encoder = Encoder(config["model"], train_dataset.vocabulary)
-decoder = Decoder(config["model"], train_dataset.vocabulary)
-# Share word embedding between encoder and decoder.
-decoder.word_embed = encoder.word_embed
-
-# Wrap encoder and decoder in a model.
-model = EncoderDecoderModel(encoder, decoder)
-
+"""MODEL INIT"""
+logging.info("Init model...")
 device = torch.device('cuda')
-
+model = get_model(config)
+logging.info("Move model to GPU...")
 model = model.to(device)
 
-# Loss function.
-criterion = get_criterion(config['model']['decoder'])
+"""LOSS FUNCTION"""
+disc_criterion = nn.CrossEntropyLoss()
+gen_criterion = nn.CrossEntropyLoss(ignore_index=0)
 
-if config["solver"]["training_splits"] == "trainval":
-	iterations = (len(train_dataset) + len(val_dataset)) // args.batch_size + 1
-	num_examples = torch.tensor(len(train_dataset) + len(val_dataset), dtype=torch.float)
-else:
-	iterations = len(train_dataset) // args.batch_size + 1
-	num_examples = torch.tensor(len(train_dataset), dtype=torch.float)
-
-optimizer = optim.Adam(model.parameters(), lr=args.lr)
-scheduler = MultiStepLR(optimizer, milestones=args.lr_steps, gamma=0.1)
+"""OPTIMIZER"""
+optimizer = optim.Adam(model.parameters(), lr=config['solver']['init_lr'])
+scheduler = MultiStepLR(optimizer, milestones=config['solver']['lr_steps'], gamma=0.5)
 
 # =============================================================================
 #   SETUP BEFORE TRAINING LOOP
 # =============================================================================
-summary_writer = SummaryWriter(log_dir=args.save_dirpath)
-checkpoint_manager = CheckpointManager(model, optimizer, args.save_dirpath, config=config)
+summary_writer = SummaryWriter(log_dir=log_path)
+checkpoint_manager = CheckpointManager(model, optimizer, save_dirpath, config=config)
 sparse_metrics = SparseGTMetrics()
+disc_metrics = SparseGTMetrics()
+gen_metrics = SparseGTMetrics()
 ndcg = NDCG()
+disc_ndcg = NDCG()
+gen_ndcg = NDCG()
 
-# monitor = Monitor(val_dataset, save_path=args.monitor_path + '/val_monitor.pkl')
+logging.info("Loading checkpoints...")
+start_epoch, model, optimizer = load_checkpoint_from_config(model, optimizer, config)
 
-# If loading from checkpoint, adjust start epoch and load parameters.
-start_epoch = 0
-
-if args.load_pthpath != "":
-	if args.resume:
-		start_epoch, model, optimizer = load_checkpoint(
-				args.load_pthpath,
-				model, optimizer,
-				device=args.device, resume=True)
-	else:
-		model = load_checkpoint(args.load_pthpath, model, device=args.device)
-
-if isinstance(args.gpu_ids, int):
-	args.gpu_ids = [args.gpu_ids]
-
-if len(args.gpu_ids) > 1:
-	model = nn.DataParallel(model)
+if torch.cuda.device_count() > 1:
+    model = nn.DataParallel(model)
 
 # =============================================================================
 #   TRAINING LOOP
 # =============================================================================
-# Forever increasing counter to keep track of iterations (for tensorboard log).
+
+iterations = len(train_dataset) // (config['solver']['batch_size'] * torch.cuda.device_count()) + 1
+num_examples = torch.tensor(len(train_dataset), dtype=torch.float)
 global_iteration_step = start_epoch * iterations
 
+for epoch in range(start_epoch, config['solver']['num_epochs']):
+    logging.info(f"Training for epoch {epoch}:")
 
-for epoch in range(start_epoch, args.num_epochs):
-	# -------------------------------------------------------------------------
-	#   ON EPOCH START  (combine dataloaders if training on train + val)
-	# -------------------------------------------------------------------------
-	if config["solver"]["training_splits"] == "trainval":
-		combined_dataloader = itertools.chain(train_dataloader, val_dataloader)
-	else:
-		combined_dataloader = itertools.chain(train_dataloader)
 
-	print(f"\nTraining for epoch {epoch}:")
+    with tqdm(total=iterations) as pbar:
 
-	with tqdm(total=iterations) as pbar:
-		epoch_loss = torch.tensor(0.0)
+        epoch_loss = torch.tensor(0.0)
+        for i, batch in enumerate(train_dataloader):
+            batch = move_to_cuda(batch, device)
 
-		for i, batch in enumerate(combined_dataloader):
-			batch = move_to_cuda(batch, device)
+            # zero out gradients
+            optimizer.zero_grad()
 
-			# zero grad
-			optimizer.zero_grad()
+            # do forward
+            out = model(batch)
 
-			# do forward
-			output = model(batch)
+            # compute loss
+            gen_loss = torch.tensor(0.0, requires_grad=True, device='cuda')
+            disc_loss = torch.tensor(0.0, requires_grad=True, device='cuda')
+            batch_loss = torch.tensor(0.0, requires_grad=True, device='cuda')
+            if out.get('opt_scores') is not None:
+                scores = out['opt_scores'].view(-1, 100)
+                target = batch['ans_ind'].view(-1)
 
-			# get target
-			if config["model"]["decoder"] == "disc":
-				target = batch['ans_ind']
-				sparse_metrics.observe(output, target)
-			else:
-				target = batch["ans_out"]
+                sparse_metrics.observe(out['opt_scores'], batch['ans_ind'])
+                disc_loss = disc_criterion(scores, target)
+                batch_loss = batch_loss + disc_loss
 
-			# compute loss
-			batch_loss = criterion(output.view(-1, output.size(-1)), target.view(-1))
+            if out.get('ans_out_scores') is not None:
+                scores = out['ans_out_scores'].view(-1, config['model']['vocab_size'])
+                target = batch['ans_out'].view(-1)
+                gen_loss = gen_criterion(scores, target)
+                batch_loss = batch_loss + gen_loss
 
-			# compute gradients
-			batch_loss.backward()
+            # compute gradients
+            batch_loss.backward()
 
-			# update params
-			optimizer.step()
+            # update params
+            optimizer.step()
 
-			pbar.set_postfix(epoch=epoch, batch_loss=batch_loss.item())
-			pbar.update(1)
+            pbar.update(1)
+            pbar.set_postfix(epoch=epoch,
+                             gen_loss=gen_loss.item(),
+                             disc_loss=disc_loss.item(),
+                             batch_loss=batch_loss.item())
 
-			experiment.log_metric('train/batch_loss', batch_loss.item())
-			summary_writer.add_scalar("train/batch_loss", batch_loss, global_iteration_step)
-			summary_writer.add_scalar("train/lr", optimizer.param_groups[0]["lr"], global_iteration_step)
+            # log metrics
+            experiment.log_metric('train/batch_loss', batch_loss.item())
+            summary_writer.add_scalar(f'{args.config}-train/batch_loss', batch_loss.item(), global_iteration_step)
 
-			global_iteration_step += 1
-			torch.cuda.empty_cache()
 
-			epoch_loss += batch["ques"].size(0) * batch_loss.detach()
+            global_iteration_step += 1
+            torch.cuda.empty_cache()
 
-		if config["model"]["decoder"] == "disc":
-			all_metrics = {}
-			all_metrics.update(sparse_metrics.retrieve(reset=True))
+            epoch_loss += batch["ans"].size(0) * batch_loss.detach()
 
-			for metric_name, metric_value in all_metrics.items():
-				print('')
-				print(f"{metric_name}: {metric_value}")
-				experiment.log_metric(f"train/{metric_name}", metric_value)
+    if out.get('opt_scores') is not None:
+        avg_metric_dict = {}
+        avg_metric_dict.update(sparse_metrics.retrieve(reset=True))
 
-			summary_writer.add_scalars("train/metrics", all_metrics, global_iteration_step)
+        for metric_name, metric_value in avg_metric_dict.items():
+            logging.info(f"{metric_name}: {metric_value}")
+            experiment.log_metric(f"train/{metric_name}", metric_value)
 
-		epoch_loss /= num_examples
+        summary_writer.add_scalars(f"{args.config}-train/metrics", avg_metric_dict, global_iteration_step)
 
-		summary_writer.add_scalar("train/epoch_loss", epoch_loss, i)
-		experiment.log_metric('train/epoch_loss', epoch_loss.item())
+    epoch_loss /= num_examples
+    experiment.log_metric('train/epoch_loss', epoch_loss.item())
+    logging.info(f"train/epoch_loss: {epoch_loss.item()}\n")
+    summary_writer.add_scalar(f'{args.config}-train/epoch_loss', epoch_loss.item(), global_iteration_step)
 
-	scheduler.step(epoch)
-	# -------------------------------------------------------------------------
-	#   ON EPOCH END  (checkpointing and validation)
-	# -------------------------------------------------------------------------
-	# Validate and report automatic metrics.
-	if args.validate:
+    # log the parameters with histogram
+    selected_names = ['module.encoder.attn_encoder.cross_attn_encoder.0.attns.0.x_memory',
+                      'module.encoder.attn_encoder.cross_attn_encoder.1.attns.0.x_memory',
+                      'module.encoder.attn_encoder.cross_attn_encoder.0.attns.0.x_proj_linear.weight',
+                      'module.encoder.attn_encoder.cross_attn_encoder.1.attns.0.x_proj_linear.weight',
+                      'module.encoder.attn_encoder.cross_attn_encoder.0.norms.0.linear.0.weight',
+                      'module.encoder.attn_encoder.cross_attn_encoder.1.norms.0.linear.0.weight',
+                      'module.encoder.summaries.0.attn_linear.0.weight',
+                      'module.encoder.encoder_linear.0.weight',
+                      'module.encoder.encoder_linear.2.weight'
+                      ]
 
-		# Switch dropout, batchnorm etc to the correct mode.
-		model.eval()
+    for name, param in model.named_parameters():
+        if name in selected_names:
+            summary_writer.add_histogram(name, param.clone().cpu().data.numpy(), global_iteration_step)
 
-		epoch_loss = torch.tensor(0.0)
+    scheduler.step(epoch)
 
-		print(f"\nValidation after epoch {epoch}:")
+    # -------------------------------------------------------------------------
+    #   ON EPOCH END  (checkpointing and validation)
+    # -------------------------------------------------------------------------
+    # Validate and report automatic metrics.
 
-		for i, batch in enumerate(tqdm(val_dataloader)):
+    if config['callbacks']['validate']:
+        # Switch dropout, batchnorm etc to the correct mode.
+        model.eval()
 
-			move_to_cuda(batch, device)
+        logging.info(f"\nValidation after epoch {epoch}:")
 
-			with torch.no_grad():
-				output = model(batch)
-				sparse_metrics.observe(output, batch["ans_ind"])
+        for batch in val_dataloader:
+            move_to_cuda(batch, device)
 
-				if "gt_relevance" in batch:
-					output = output[torch.arange(output.size(0)), batch["round_id"] - 1, :]
-					ndcg.observe(output, batch["gt_relevance"])
+            with torch.no_grad():
+                out = model(batch)
 
-		# monitor.update(batch['img_ids'], output, batch['ans_ind'])
+                if out.get('opt_scores') is not None:
+                    scores = out['opt_scores']
+                    disc_metrics.observe(scores, batch["ans_ind"])
 
-		# if 'gt_relevance' in batch:
-		# 	monitor.export()
+                    if "gt_relevance" in batch:
+                        scores = scores[
+                                 torch.arange(scores.size(0)),
+                                 batch["round_id"] - 1, :]
 
-		all_metrics = {}
-		all_metrics.update(sparse_metrics.retrieve(reset=True))
-		all_metrics.update(ndcg.retrieve(reset=True))
+                        disc_ndcg.observe(scores, batch["gt_relevance"])
 
-		for metric_name, metric_value in all_metrics.items():
-			print(f"{metric_name}: {metric_value}")
-			experiment.log_metric(f"val/{metric_name}", metric_value)
+                if out.get('opts_out_scores') is not None:
+                    scores = out['opts_out_scores']
+                    gen_metrics.observe(scores, batch["ans_ind"])
 
-		summary_writer.add_scalars("val/metrics", all_metrics, global_iteration_step)
+                    if "gt_relevance" in batch:
+                        scores = scores[
+                                 torch.arange(scores.size(0)),
+                                 batch["round_id"] - 1, :]
 
-		model.train()
-		torch.cuda.empty_cache()
+                        gen_ndcg.observe(scores, batch["gt_relevance"])
 
-	# Checkpoint
-	checkpoint_manager.step(epoch=epoch, only_best=True, metrics=all_metrics)
+                if out.get('opt_scores') is not None and out.get('opts_out_scores') is not None:
+                    scores = (out['opts_out_scores'] + out['opt_scores']) / 2
+
+                    sparse_metrics.observe(scores, batch["ans_ind"])
+                    if "gt_relevance" in batch:
+                        scores = scores[
+                                 torch.arange(scores.size(0)),
+                                 batch["round_id"] - 1, :]
+
+                        ndcg.observe(scores, batch["gt_relevance"])
+
+        avg_metric_dict = {}
+        avg_metric_dict.update(sparse_metrics.retrieve(reset=True, key='avg_'))
+        avg_metric_dict.update(ndcg.retrieve(reset=True, key='avg_'))
+
+        disc_metric_dict = {}
+        disc_metric_dict.update(disc_metrics.retrieve(reset=True, key='disc_'))
+        disc_metric_dict.update(disc_ndcg.retrieve(reset=True, key='disc_'))
+
+        gen_metric_dict = {}
+        gen_metric_dict.update(gen_metrics.retrieve(reset=True, key='gen_'))
+        gen_metric_dict.update(gen_ndcg.retrieve(reset=True, key='gen_'))
+
+        for metric_dict in [avg_metric_dict, disc_metric_dict, gen_metric_dict]:
+            for metric_name, metric_value in metric_dict.items():
+                logging.info(f"{metric_name}: {metric_value}")
+                experiment.log_metric(f"val/{metric_name}", metric_value)
+
+            summary_writer.add_scalars(f"{args.config}-val/metrics", metric_dict, global_iteration_step)
+
+        model.train()
+        torch.cuda.empty_cache()
+
+        # Checkpoint
+        if 'disc' in config['config_name']:
+            checkpoint_manager.step(epoch=epoch, only_best=False, metrics=disc_metric_dict, key='disc_')
+        elif 'gen' in config['config_name']:
+            checkpoint_manager.step(epoch=epoch, only_best=False, metrics=gen_metric_dict, key='gen_')
+
+        elif 'misc' in config['config_name']:
+            checkpoint_manager.step(epoch=epoch, only_best=False, metrics=disc_metric_dict, key='disc_')
+
+    if args.online is False:
+        logging.info('Copy log to local_computer...\n\n')
+
+        folder_name = config['callbacks']['path_dir_save_ckpt'].split('/')[-1]
+        os.system(f'scp -i /home/quang/.ssh/key_local_computer -r {log_path} quanguet@172.16.12.170:/home/quanguet/Dropbox/checkpoints/visdial/{folder_name}')
+
+        log_files = [file for file in glob('/home/quang/log/*') if folder_name in file]
+        for log_file in log_files:
+            os.system(f'scp -i /home/quang/.ssh/key_local_computer -r {log_file} \
+            quanguet@172.16.12.170:/home/quanguet/Dropbox/checkpoints/visdial/{folder_name}')
+
+
+# Log the model state_dict with best ndcg and best mean
+best_mean_epoch = checkpoint_manager.best_mean_epoch
+best_ndcg_epoch = checkpoint_manager.best_ndcg_epoch
+
+logging.info(f'save best mean epoch: {best_mean_epoch}')
+experiment.log_asset(os.path.join(config['callbacks']['path_dir_save_ckpt'], f"checkpoint_{best_mean_epoch}.pth"))
+logging.info(f'save best ndcg epoch: {best_ndcg_epoch}')
+experiment.log_asset(os.path.join(config['callbacks']['path_dir_save_ckpt'], f"checkpoint_{best_ndcg_epoch}.pth"))
+
+summary_writer.close()

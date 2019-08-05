@@ -55,7 +55,7 @@ class CheckpointManager(object):
 			model,
 			optimizer,
 			checkpoint_dirpath,
-			**kwargs,
+			config={}
 			):
 
 		if not isinstance(model, nn.Module):
@@ -71,26 +71,42 @@ class CheckpointManager(object):
 		self.ckpt_dirpath = Path(checkpoint_dirpath)
 		self.best_ndcg = 0.0
 		self.best_mean = 100.
-		self.init_directory(**kwargs)
+		self.init_directory(config)
+		self.best_ndcg_epoch = 0
+		self.best_mean_epoch = 0
 
 	def init_directory(self, config={}):
 		"""init"""
 		self.ckpt_dirpath.mkdir(parents=True, exist_ok=True)
-		with open(str(self.ckpt_dirpath / "config.yml"), "w") as file:
-			yaml.dump(config, file, default_flow_style=False)
 
-	def step(self, epoch=None, only_best=False, metrics=None):
+		import json
+		with open(self.ckpt_dirpath/'config.json', 'w') as f:
+			json.dump(config, f)
+
+
+	def step(self, epoch=None, only_best=False, metrics=None, key=''):
 		"""Save checkpoint if step size conditions meet. """
 		if not only_best:
 			self._save_state_dict(str(epoch), epoch, metrics)
+
+			if metrics[key + 'ndcg'] >= self.best_ndcg:
+				self.best_ndcg = metrics[key + 'ndcg']
+				self.best_ndcg_epoch = epoch
+
+			if metrics[key + 'mean'] >= self.best_ndcg:
+				self.best_mean = metrics[key + 'mean']
+				self.best_mean_epoch = epoch
+
 		else:
-			if metrics['ndcg'] >= self.best_ndcg:
-				self.best_ndcg = metrics['ndcg']
+			if metrics[key + 'ndcg'] >= self.best_ndcg:
+				self.best_ndcg = metrics[key + 'ndcg']
+				self.best_ndcg_epoch = epoch
 				print('Save best ndcg {} at epoch {}'.format(self.best_ndcg, epoch))
 				self._save_state_dict('best_ndcg', epoch, metrics)
 
-			if metrics['mean'] <= self.best_mean:
-				self.best_mean = metrics['mean']
+			if metrics[key + 'mean'] <= self.best_mean:
+				self.best_mean = metrics[key + 'mean']
+				self.best_ndcg_epoch = epoch
 				print('Save best mean {} at epoch {}'.format(self.best_mean, epoch))
 				self._save_state_dict('best_mean', epoch, metrics)
 
@@ -114,27 +130,7 @@ class CheckpointManager(object):
 			return self.model.state_dict()
 
 
-def update_weights(net, pretrained_dict):
-	model_dict = net.state_dict()
-	pretrained_dict = {k: v for k, v in pretrained_dict.items()
-	                   if k in model_dict}
-
-	# for old lf_disc on unidirectional-LSTM
-	incompat_keys = [
-		'encoder.hist_rnn.rnn_model.weight_ih_l1',
-		'encoder.ques_rnn.rnn_model.weight_ih_l1',
-		'decoder.option_rnn.rnn_model.weight_ih_l1'
-		]
-
-	for key in incompat_keys:
-		pretrained_dict[key] = torch.cat([pretrained_dict[key] * 2], dim=-1)
-
-	model_dict.update(pretrained_dict)
-	net.load_state_dict(model_dict)
-	return net
-
-
-def load_checkpoint(checkpoint_pthpath, model, optimizer=None, device='cuda', resume=False):
+def load_checkpoint(model, optimizer, checkpoint_pthpath='', device='cuda', resume=False):
 	"""Load checkpoint"""
 	# load encoder, decoder, optimizer state_dicts
 
@@ -145,19 +141,23 @@ def load_checkpoint(checkpoint_pthpath, model, optimizer=None, device='cuda', re
 		print('Metrics score:', components.get('metrics'))
 	else:
 		print("Can't load weight from {}".format(checkpoint_pthpath))
-		return model
+		return 0, model, optimizer
 
 	if resume:
 		# "path/to/checkpoint_xx.pth" -> xx
 		print('Resume training....')
 		start_epoch = components['epoch']
-		model.load_state_dict(components["model"])
+		model.load_my_state_dict(components["model"])
 		optimizer.load_state_dict(components["optimizer"])
 		return start_epoch, model, optimizer
 
 	else:
-		model.load_state_dict(components["model"])
-		return model
+		model.load_my_state_dict(components["model"])
+		return 0, model, optimizer
 
-	# else:
-	# 	return update_weights(model, components["model"])
+def load_checkpoint_from_config(model, optimizer, config):
+
+	return load_checkpoint(model, optimizer,
+						   checkpoint_pthpath=config['callbacks']['path_pretrained_ckpt'],
+						   resume=config['callbacks']['resume'],
+						   device='cuda')
