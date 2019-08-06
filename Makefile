@@ -1,4 +1,4 @@
-.PHONY: clean
+.PHONY: clean, k2, clean, all
 
 k2: clean
 	rsync -av \
@@ -19,4 +19,6 @@ clean:
 git: clean
 	git add .
 	git commit -m "$m"
-	git push origin master
+	git push -u origin master
+	
+all: k2 git
