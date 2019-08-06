@@ -35,8 +35,6 @@ class VisdialModel(nn.Module):
         init_dict = {
             'kaiming_uniform': nn.init.kaiming_uniform_,
             'kaiming_normal' : nn.init.kaiming_normal_,
-            'xaiver_uniform'   : nn.init.xavier_uniform_,
-            'xaiver_normal'    : nn.init.xavier_normal_
         }
 
         if isinstance(m, nn.Linear):

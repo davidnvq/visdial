@@ -8,7 +8,7 @@ osp = os.path.join
 
 HOME_PATH = os.path.expanduser("~")
 HOME_PATH = '/home/quang'
-DATA_PATH = osp(HOME_PATH, 'datasets/visdial')
+DATA_PATH = '/media/local_workspace/quang/datasets/visdial'
 PROJ_PATH = os.path.join(HOME_PATH, 'repos/visdial_v5')
 
 CONFIG = {
@@ -56,7 +56,7 @@ CONFIG = {
         'max_seq_len'      : 20,
         'is_return_options': True,
         'is_add_boundaries': True,
-        'glove'            : osp(PROJ_PATH, 'data/embedding_Glove_840_300d.pkl'),
+        'glove'            : osp(DATA_PATH, 'data/embedding_Glove_840_300d.pkl'),
         'train'            : {
             'path_feat_img'          : osp(DATA_PATH, 'features_faster_rcnn_x101_train.h5'),
             'path_json_dialogs'      : osp(DATA_PATH, 'visdial_1.0_train.json'),

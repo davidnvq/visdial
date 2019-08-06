@@ -2,9 +2,6 @@
 import csv
 import sys
 import h5py
-import zlib
-import time
-import mmap
 import base64
 import argparse
 import numpy as np
@@ -18,12 +15,11 @@ def get_num_images(path):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--in_tsv_file")
-parser.add_argument('--out_h5_file')
-parser.add_argument('--old_h5_file')
-parser.add_argument('--split', default='val')
-parser.add_argument('--max_boxes', default=36, type=int)
-parser.add_argument('--feat_dims', default=2048, type=int)
-
+parser.add_argument("--out_h5_file")
+parser.add_argument("--old_h5_file")
+parser.add_argument("--split")
+parser.add_argument("--max_boxes", default=36, type=int)
+parser.add_argument("--feat_dims", default=2048, type=int)
 args = parser.parse_args()
 
 num_images = get_num_images(args.old_h5_file)
