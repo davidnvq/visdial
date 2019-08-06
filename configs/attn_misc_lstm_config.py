@@ -1,15 +1,13 @@
-# CUDA_VISIBLE_DEVICES=0,1,2,3 /home/quang/anaconda3/bin/python /home/quang/repos/visdial/train.py --config attn_misc_lstm
-# Train on yagi19
-
 import copy
 import os
 
 osp = os.path.join
 
 HOME_PATH = '/media/local_workspace/quang'
+# HOME_PATH = '/home/quanguet' # for quang-pc only
 DATA_PATH = f'{HOME_PATH}/datasets/visdial'
 
-EXTENTION = 'v7.0'
+EXTENTION = 'v71'
 CONFIG_NAME = 'attn_misc_lstm'
 
 CONFIG = {
@@ -25,11 +23,11 @@ CONFIG = {
 		},
 
 	'solver'       : {
-		'num_epochs'     : 25,
+		'num_epochs'     : 32,
 		'batch_size'     : 8,
 		'cpu_workers'    : 16,
 		'init_lr'        : 1e-3,
-		'lr_steps'       : [4, 8, 12, 16, 20],
+		'lr_steps'       : [4, 8, 12, 16, 20, 24, 28],
 		'training_splits': 'train'
 		},
 
@@ -60,7 +58,7 @@ CONFIG = {
 		'num_boxes'        : 36,
 		'is_return_options': True,
 		'is_add_boundaries': True,
-		'glove'            : osp(DATA_PATH, 'embedding_Glove_840_300d.pkl'),
+		'glove'            : osp(DATA_PATH, 'glove/embedding_Glove_840_300d.pkl'),
 		'train'            : {
 			'path_feat_img'          : osp(DATA_PATH, 'bottom-up/trainval_resnet101_faster_rcnn_genome_36.h5'),
 			'path_json_dialogs'      : osp(DATA_PATH, 'annotations/visdial_1.0_train.json'),
