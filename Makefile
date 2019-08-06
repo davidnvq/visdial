@@ -19,4 +19,4 @@ clean:
 git: clean
 	git add .
 	git commit -m "$m"
-	git push origin masterr
+	git push origin master
