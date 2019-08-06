@@ -30,4 +30,4 @@
 
 [tb-ad-v5]: None
 [tb-am-v5]: None
-[tb-am-v71]: yagi11:6006
+[tb-am-v71]: http://yagi11:6006
