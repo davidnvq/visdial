@@ -76,7 +76,8 @@ def get_attn_encoder(config):
             hidden_size=config['model']['hidden_size'],
             num_heads=config['model']['encoder_num_heads'],
             memory_size=config['model']['encoder_memory_size'],
-            num_cross_attns=config['model']['encoder_num_cross_attns']
+            num_cross_attns=config['model']['encoder_num_cross_attns'],
+            share_attn=config['model']['share_attn']
         ),
         hidden_size=config['model']['hidden_size']
     )

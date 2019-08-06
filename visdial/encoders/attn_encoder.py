@@ -122,13 +122,16 @@ class CrossAttentionLayer(nn.Module):
 
 class CrossAttentionEncoder(nn.Module):
 
-	def __init__(self, hidden_size, num_heads, memory_size=1, dropout=0.0, num_cross_attns=2, **kwargs):
+	def __init__(self, hidden_size, num_heads, memory_size=1, dropout=0.0, num_cross_attns=2, share_attn=False, **kwargs):
 		super(CrossAttentionEncoder, self).__init__()
 		# share the same cross-attn layer
 		# then the number of params reduced by / num_cross_attns
+
 		layer = CrossAttentionLayer(hidden_size, num_heads, memory_size, dropout)
 		layers = []
 		for i in range(num_cross_attns):
+			if not share_attn:
+				layer = CrossAttentionEncoder(hidden_size, num_heads, memory_size, dropout)
 			layers.append(layer)
 		self.cross_attn_encoder = nn.Sequential(*layers)
 

@@ -6,20 +6,22 @@ import os
 
 osp = os.path.join
 
-HOME_PATH = os.path.expanduser("~")
-HOME_PATH = '/home/quang'
-DATA_PATH = '/home/quang/datasets/visdial'
+HOME_PATH = '/media/local_workspace/quang'
+DATA_PATH = f'{HOME_PATH}/datasets/visdial'
+
+EXTENTION = 'v7.0'
+CONFIG_NAME = 'attn_misc_lstm'
 
 CONFIG = {
 	'seed'         : 0,
-	'config_name'  : 'attn_misc_lstm',
+	'config_name'  : CONFIG_NAME,
 	'comet_project': 'tmp',
 
 	'callbacks'    : {
 		'validate'            : True,
 		'resume'              : False,
 		'path_pretrained_ckpt': '',
-		'path_dir_save_ckpt'  : '/home/quang/checkpoints/visdial/test'
+		'path_dir_save_ckpt'  : f'{HOME_PATH}/checkpoints/visdial/{CONFIG_NAME}_{EXTENTION}'
 		},
 
 	'solver'       : {
@@ -46,6 +48,7 @@ CONFIG = {
 		'embedding_has_position'    : True,
 		'embedding_has_hidden_layer': False,
 		'embedding_size'            : 300,
+		'share_attn'                : False,
 		},
 
 	'dataset'      : {

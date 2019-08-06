@@ -42,7 +42,4 @@ logs/
 
 # IPython Notebook
 .ipynb_checkpoints
-
-# virtualenv
-venv/
-ENV/
+*ipynb
