@@ -3,14 +3,15 @@ import os
 
 osp = os.path.join
 
-HOME_PATH = '/media/local_workspace/quang'
+# HOME_PATH = '/media/local_workspace/quang'
+HOME_PATH = '/home/quanguet' # for quang-pc only
 DATA_PATH = f'{HOME_PATH}/datasets/visdial'
 
-EXTENTION = 'v1.0'
+EXTENTION = 'v712'
 CONFIG_NAME = 'attn_misc_lstm'
 
 CONFIG = {
-	'seed'         : 0,
+	'seed'         : 2,
 	'config_name'  : CONFIG_NAME,
 	'comet_project': 'tmp',
 
@@ -18,22 +19,23 @@ CONFIG = {
 		'validate'            : True,
 		'resume'              : False,
 		'path_pretrained_ckpt': '',
-		'path_dir_save_ckpt'  : f'{HOME_PATH}/checkpoints/visdial/reborn/{CONFIG_NAME}_{EXTENTION}'
+		'path_dir_save_ckpt'  : f'{HOME_PATH}/checkpoints/visdial/{CONFIG_NAME}_{EXTENTION}'
 		},
 
 	'solver'       : {
-		'num_epochs' : 30,
-		'batch_size' : 8,
-		'cpu_workers': 16,
-		'init_lr'    : 1e-3,
-		'lr_steps'   : [4, 8, 12, 16, 20, 24, 26],
+		'num_epochs'     : 32,
+		'batch_size'     : 8,
+		'cpu_workers'    : 16,
+		'init_lr'        : 1e-3,
+		'lr_steps'       : [4, 8, 12, 16, 20, 24, 26],
+		'training_splits': 'train'
 		},
 
 	'model'        : {
 		'tokenizer'                 : 'nlp',
 		'hidden_size'               : 512,
 		'dropout'                   : 0.2,
-		'img_feature_size'          : 2048,
+		'img_feature_size'          : 1024,
 		'vocab_size'                : 11322,
 		'bidirectional'             : True,
 		'decoder_type'              : 'misc',
@@ -50,7 +52,6 @@ CONFIG = {
 	'dataset'      : {
 		'overfit'          : False,
 		'img_norm'         : 1,
-		'is_legacy'        : True,
 		'concat_history'   : True,
 		'max_seq_len'      : 20,
 		'is_return_boxes'  : False,
@@ -59,20 +60,20 @@ CONFIG = {
 		'is_add_boundaries': True,
 		'glove'            : osp(DATA_PATH, 'glove/embedding_Glove_840_300d.pkl'),
 		'train'            : {
-			'path_feat_img'          : osp(DATA_PATH, 'legacy/features_faster_rcnn_x101_train.h5'),
+			'path_feat_img'          : osp(DATA_PATH, 'bottom-up/trainval_resnet101_faster_rcnn_genome_36.h5'),
 			'path_json_dialogs'      : osp(DATA_PATH, 'annotations/visdial_1.0_train.json'),
 			'path_json_word_count'   : osp(DATA_PATH, 'annotations/visdial_1.0_word_counts_train.json'),
 			'path_json_dense_dialogs': ''
 			},
 
 		'val'              : {
-			'path_feat_img'          : osp(DATA_PATH, 'legacy/features_faster_rcnn_x101_val.h5'),
-			'path_json_dialogs'      : osp(DATA_PATH, 'annotations/visdial_1.0_val.json'),
+			'path_feat_img'          : osp(DATA_PATH, 'detectron/val_faster_rcnn_X-101-32x8d-FPN_1x.h5'),
+			'path_json_dialogs'      : '/home/quanguet/datasets/visdial/annotations/visdial_1.0_val.json',
 			'path_json_dense_dialogs': osp(DATA_PATH, 'annotations/visdial_1.0_val_dense_annotations.json')
 			},
 
 		'test'             : {
-			'path_feat_img': osp(DATA_PATH, 'legacy/features_faster_rcnn_x101_test.h5'),
+			'path_feat_img': osp(DATA_PATH, 'bottom-up/test2018_resnet101_faster_rcnn_genome_36.h5'),
 			}
 		}
 	}

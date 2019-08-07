@@ -21,12 +21,13 @@ class VisDialDataset(Dataset):
 	history, ground truth answer, answer options, dense annotations etc.
 	"""
 
-	def __init__(self, config, split="train"):
+	def __init__(self, config, split="train", is_detectron=False):
 
 		super().__init__()
 		self.config = config
 		self.split = split
-
+		self.is_legacy = config['dataset']['is_legacy']
+		self.is_detectron = is_detectron
 		self.tokenizer = self._get_tokenizer(config)
 		self.is_add_boundaries = self._get_is_add_boundaries(config)
 		self.is_return_options = self._get_is_return_options(config, split)
@@ -88,7 +89,7 @@ class VisDialDataset(Dataset):
 
 	def _get_img_feat_reader(self, config, split):
 		path = config['dataset'][split]['path_feat_img']
-		hdf_reader = ImageFeaturesHdfReader(path)
+		hdf_reader = ImageFeaturesHdfReader(path, self.is_detectron, self.is_legacy)
 		return hdf_reader
 
 	def _get_tokenizer(self, config):
@@ -361,15 +362,43 @@ class VisDialDataset(Dataset):
 
 	def return_img_feat_to_item(self, image_id):
 		# Get image features for this image_id using hdf reader.
-		img_feat = self.img_feat_reader[image_id]
-		img_feat = torch.tensor(img_feat)
+		if self.is_legacy:
+			img_feat = self.img_feat_reader[image_id]
+			img_feat = torch.tensor(img_feat)
+			if self.config['dataset']["img_norm"]:
+				img_feat = normalize(img_feat, dim=0, p=2)
 
-		# Normalize image features at zero-th dimension
-		# (since there's no batch dimension).
-		if self.config['dataset']["img_norm"]:
-			img_feat = normalize(img_feat, dim=0, p=2)
+			return {'img_feat' : img_feat}
 
-		return {'img_feat': img_feat}
+		if self.is_detectron:
+			img_feat, boxes, classes, scores = self.img_feat_reader[image_id]
+			img_feat = torch.tensor(img_feat)
+			boxes = torch.tensor(boxes)
+
+			# Normalize image features at zero-th dimension
+			# (since there's no batch dimension).
+			if self.config['dataset']["img_norm"]:
+				img_feat = normalize(img_feat, dim=0, p=2)
+
+			return {'img_feat': img_feat,
+			        'boxes'   : boxes}
+
+		else:
+			img_feat, img_w, img_h, boxes  = self.img_feat_reader[image_id]
+			img_feat = torch.tensor(img_feat)
+			img_w = torch.tensor(img_w)
+			img_h = torch.tensor(img_h)
+			boxes = torch.tensor(boxes)
+
+			# Normalize image features at zero-th dimension
+			# (since there's no batch dimension).
+			if self.config['dataset']["img_norm"]:
+				img_feat = normalize(img_feat, dim=0, p=2)
+
+			return {'img_feat': img_feat,
+			        'img_w' : img_w,
+			        'img_h' : img_h,
+			        'boxes' : boxes}
 
 	def monitor_output(self, image_id):
 		visdial_instance = self.dialogs_reader[image_id]

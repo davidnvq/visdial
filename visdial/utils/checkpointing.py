@@ -1,17 +1,3 @@
-"""
-A checkpoint manager periodically saves model and optimizer as .pth
-files during training.
-
-Checkpoint managers help with experiment reproducibility, they record
-the commit SHA of your current codebase in the checkpoint saving
-directory. While loading any checkpoint from other commit, they raise a
-friendly warning, a signal to inspect commit diffs for potential bugs.
-Moreover, they copy experiment hyper-parameters as a YAML config in
-this directory.
-
-That said, always run your experiments after committing your changes,
-this doesn't account for untracked or staged, but uncommitted changes.
-"""
 from pathlib import Path
 import warnings
 import os

@@ -1,4 +1,16 @@
 
+## Tensorboard 
+
+| Model  | Tensorboard        |
+|--------|--------------------|
+| v1.0   | http://yagi08:6006 |
+| v1.1   | http://yagi08:6007 |
+| v2.0   | http://yagi09:6006 |
+| v2.1   | http://yagi09:6007 |
+| v2.2.0 | http://yagi11:6006 |
+| v2.2.1 | http://yagi14:6006 |
+
+
 ## Discriminative Decoder
 
 | Model          | Tensorboard       | Comet | NDCG  (disc)    | MRR             | Mean          | R@1             | R@5             | R@10            |
@@ -6,10 +18,6 @@
 | lf_disc_v1     | [link][tb-lf-v1]  |       | 0.5689 (0.5604) | 0.6129 (0.6206) | 4.718 (4.506) | 0.4719 (0.4808) | 0.7839 (0.7932) | 0.8795 (0.8872) |
 | attn_disc_v5   | [link][tb-ad-v5]  |       | 0.5978 (0.5542) | 0.6077 (0.6180) | 5.421 (4.506) | 0.4704 (0.4769) | 0.7745 (0.7918) | 0.8639 (0.8825) |
 | attn_misc_v5   | [link][tb-am-v5]  |       | 0.6031 (0.5519) | 0.6033 (0.6227) | 5.579 (4.433) | 0.4665 (0.4826) | 0.7692 (0.7946) | 0.8611 (0.8865) |
-| attn_misc_v7.1 | [link][tb-am-v71] |       |                 |                 |               |                 |                 |                 |
-|                |                   |       |                 |                 |               |                 |                 |                 |
-|                |                   |       |                 |                 |               |                 |                 |                 |
-
 
 ## Generative Decoder
 
@@ -31,3 +39,5 @@
 [tb-ad-v5]: None
 [tb-am-v5]: None
 [tb-am-v71]: http://yagi11:6006
+[tb-am-v711]: http://yagi09:6006
+[tb-am-v712]: http://yagi09:6007

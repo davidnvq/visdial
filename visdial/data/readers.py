@@ -361,8 +361,10 @@ class ImageFeaturesHdfReader(object):
 		RAM - trade-off between speed and memory.
 	"""
 
-	def __init__(self, features_hdfpath):
+	def __init__(self, features_hdfpath, is_detectron=False, is_legacy=False):
 		self.features_hdfpath = features_hdfpath
+		self.is_legacy = is_legacy
+		self.is_detectron = is_detectron
 
 		with h5py.File(self.features_hdfpath, "r") as features_hdf:
 			self._split = features_hdf.attrs["split"]
@@ -373,10 +375,26 @@ class ImageFeaturesHdfReader(object):
 
 	def __getitem__(self, image_id: int):
 		index = self.image_id_list.index(image_id)
+		if self.is_legacy:
+			with h5py.File(self.features_hdfpath, "r") as features_hdf:
+				image_id_features = features_hdf["features"][index]
+			return image_id_features
+
+		if self.is_detectron:
+			with h5py.File(self.features_hdfpath, "r") as features_hdf:
+				image_id_features = features_hdf["features"][index]
+				boxes = features_hdf["boxes"][index]
+				classes = features_hdf["classes"][index]
+				scores = features_hdf["scores"][index]
+			return image_id_features, boxes, classes, scores
+
 		with h5py.File(self.features_hdfpath, "r") as features_hdf:
 			image_id_features = features_hdf["features"][index]
+			img_w = features_hdf["image_w"][index]
+			img_h = features_hdf["image_h"][index]
+			boxes = features_hdf["boxes"][index]
 
-		return image_id_features
+		return image_id_features, img_w, img_h, boxes
 
 	def keys(self) -> List[int]:
 		return self.image_id_list

@@ -3,6 +3,7 @@ from tensorboardX import SummaryWriter
 
 import os
 import sys
+import json
 import torch
 import random
 import logging
@@ -22,7 +23,6 @@ from visdial.utils import move_to_cuda
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
                     format=log_format, datefmt='%m/%d %I:%M:%S %p')
-
 
 def get_comet_experiment(config, is_online=False, offline_dir=None):
 	if is_online:
@@ -48,6 +48,7 @@ args = parser.parse_args()
 from configs import get_config
 
 config = get_config(config_name=args.config)
+print(json.dumps(config, indent=2))
 
 save_dirpath = config['callbacks']['path_dir_save_ckpt']
 log_path = save_dirpath + '/log'
@@ -69,10 +70,12 @@ for key in ['model', 'solver']:
 logging.info("Start zipping project...")
 
 project_name = config['callbacks']['path_dir_save_ckpt'].split('/')[-1]
-os.system(f"zip -r -uq  {project_name}.zip ./ -x '*.git*' '*.ipynb_checkpoints*' '*.idea*' '*__pycache__*' ")
+os.system(f"zip -r -uq  {project_name}.zip \
+/home/quang/repos/visdial -x '*.git*' '*.ipynb_checkpoints*' '*.idea*' '*__pycache__*' ")
+
 os.system(f"cp {project_name}.zip {config['callbacks']['path_dir_save_ckpt']}")
 experiment.log_asset(f"{project_name}.zip")
-os.system(f"rm {project_name}.zip")
+os.system(f"mv {project_name}.zip /home/quang/repos/reborn")
 
 # =============================================================================
 # For reproducibility.
