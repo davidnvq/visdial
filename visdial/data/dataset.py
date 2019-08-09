@@ -286,13 +286,10 @@ class VisDialDataset(Dataset):
 		# print('history', history)
 		# Drop last entry from history (there's no eleventh question).
 		history = history[:-1]
-
 		max_history_length = self.config['dataset']['max_seq_len'] * 2
-
 		round_tokens, round_lens = self.do_padding(history, max_seq_len=max_history_length)
 
-		print('hist_len', len(history))
-
+		return round_tokens, round_lens
 
 		# 10 dialog histories
 		# 1 - caption
@@ -301,17 +298,17 @@ class VisDialDataset(Dataset):
 		# ....
 		# 10 caption, round1, round2, ..., round9
 
-		concat_hist_tokens = []
-		for i in range(0, len(history)):
-			concat_hist_tokens.append([])
-			for j in range(i + 1):
-				concat_hist_tokens[i].extend(history[j])
+		# concat_hist_tokens = []
+		# for i in range(0, len(history)):
+		# 	concat_hist_tokens.append([])
+		# 	for j in range(i + 1):
+		# 		concat_hist_tokens[i].extend(history[j])
+		#
+		# concat_hist_tokens, concat_hist_lens = self.do_padding(
+		# 	concat_hist_tokens,
+		# 	max_seq_len=max_history_length * 10)
 
-		concat_hist_tokens, concat_hist_lens = self.do_padding(
-			concat_hist_tokens,
-			max_seq_len=max_history_length * 10)
-
-		return round_tokens, round_lens, concat_hist_tokens, concat_hist_lens
+		# return round_tokens, round_lens, concat_hist_tokens, concat_hist_lens
 
 
 	def return_token_feats_to_item(self, visdial_instance):
@@ -332,7 +329,7 @@ class VisDialDataset(Dataset):
 			sequences = [dialog_round["question"] for dialog_round in dialog]
 			ques_tokens, ques_lens = self._pad_sequences(sequences)
 
-			hist_tokens, hist_lens, concat_hist_tokens, concat_hist_lens = self._get_history(
+			hist_tokens, hist_lens = self._get_history(
 					caption,
 					[dialog_round["question"] for dialog_round in dialog],
 					[dialog_round["answer"] for dialog_round in dialog],
@@ -342,9 +339,7 @@ class VisDialDataset(Dataset):
 				'ques_tokens': ques_tokens.long(),
 				'hist_tokens': hist_tokens.long(),
 				'ques_len'   : ques_lens.long(),
-				'hist_len'   : hist_lens.long(),
-				'concat_hist_tokens' : concat_hist_tokens.long(),
-				'concat_hist_len' : concat_hist_lens.long()
+				'hist_len'   : hist_lens.long()
 				}
 		else:
 			return {}
