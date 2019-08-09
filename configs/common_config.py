@@ -46,6 +46,7 @@ CONFIG = {
 		'embedding_has_hidden_layer': False,
 		'embedding_size'            : 300,
 		'share_attn'                : False,
+		'split' : 'test'
 		},
 
 	'dataset'      : {

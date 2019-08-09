@@ -44,13 +44,12 @@ class TextEncoder(nn.Module):
 
 class QuesEncoder(nn.Module):
 
-    def __init__(self, text_encoder, hidden_size):
+    def __init__(self, text_encoder, hidden_size, split='train'):
         super(QuesEncoder, self).__init__()
         self.hidden_size = hidden_size
         self.encoder = text_encoder
         self.ques_linear = nn.Linear(hidden_size*2, hidden_size)
-        nn.init.kaiming_uniform_(self.ques_linear.weight)
-        nn.init.constant_(self.ques_linear.bias, 0)
+        self.split = split
 
 
     def forward(self, ques, ques_len):
@@ -61,6 +60,13 @@ class QuesEncoder(nn.Module):
                ques         shape [bs, num_hist, max_seq_len, hidden_size]
                ques_mask    shape [bs, num_hist, max_seq_len]
         """
+        # for test only
+        if self.split == 'test':
+            # get only the last question
+            last_idx = (ques_len > 0).sum()
+            ques = ques[:, last_idx-1:last_idx]
+            ques_len = ques_len[:, last_idx-1:last_idx]
+
         bs, num_hist, max_seq_len, embedding_size = ques.size()
 
         # shape [bs * num_hist, max_seq_len, hidden_size]
@@ -103,13 +109,12 @@ class QuesEncoder(nn.Module):
 
 class HistEncoder(nn.Module):
 
-    def __init__(self, text_encoder, hidden_size):
+    def __init__(self, text_encoder, hidden_size, split='train'):
         self.hidden_size = hidden_size
         super(HistEncoder, self).__init__()
         self.encoder = text_encoder
         self.hist_linear = nn.Linear(hidden_size * 2, hidden_size)
-        # nn.init.kaiming_uniform_(self.hist_linear.weight)
-        # nn.init.constant_(self.hist_linear.bias, 0)
+        self.split=split
 
         if isinstance(text_encoder, TransformerEncoder):
             self.summary_linear = SummaryAttention(hidden_size)
@@ -121,8 +126,6 @@ class HistEncoder(nn.Module):
         # shape [bs * num_rounds, max_seq_len, hidden_size]
         hist = hist.view(bs * num_rounds, max_seq_len, embedding_size)
 
-        num_hist = 10
-
         # # shape [bs * num_hist * num_rounds, max_seq_len]
         # hist_mask = torch.arange(max_seq_len, device=hist.device).repeat(bs * num_hist * num_rounds, 1)
         # hist_mask = hist_mask < hist_len.unsqueeze(-1)
@@ -130,28 +133,30 @@ class HistEncoder(nn.Module):
         # shape [bs * num_rounds]
         hist_len = hist_len.view(bs * num_rounds)
 
-        # shape [10, 10]
-        MASK = torch.tensor([
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-            [1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-            [1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-            [1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
-            [1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
-            [1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-            [1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
-            [1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
-            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        ], device=hist.device)
+        if self.split == 'test':
+            num_hist = 1
+            round_mask = torch.ones(bs, num_hist, num_rounds, 1, device=hist.device)
+            hist_mask = torch.ones(bs * num_hist, num_rounds, device=hist.device)
+        else:
+            num_hist = 10
+            # shape [10, 10]
+            MASK = torch.tensor([
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+                [1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                [1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+                [1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+                [1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+                [1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+                [1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ], device=hist.device)
 
-        # shape [bs, num_hist, num_rounds, 1]
-        round_mask = MASK[None, :, :, None].repeat(bs, 1, 1, 1)
+            # shape [bs, num_hist, num_rounds, 1]
+            round_mask = MASK[None, :, :, None].repeat(bs, 1, 1, 1)
 
-        # if isinstance(self.encoder, TransformerEncoder):
-        #     # shape [bs * num_rounds, max_seq_len, hidden_size]
-        #     hist = self.encoder(hist, hist_mask)
-        #     # shape [bs, num_rounds, max_seq_len, hidden_size]
-        #     hist = hist.view(bs, num_rounds, max_seq_len, self.hidden_size)
+            hist_mask = MASK[None, :, :].repeat(bs, 1, 1).view(bs * num_hist, num_rounds)
 
         if isinstance(self.encoder, DynamicRNN):
 
@@ -194,7 +199,6 @@ class HistEncoder(nn.Module):
             # shape: [bs * num_hist, num_rounds, hidden_size]
             hist = hist.view(bs * num_hist, num_rounds, self.hidden_size)
 
-        hist_mask = MASK[None, :, :].repeat(bs, 1, 1).view(bs * num_hist, num_rounds)
 
         return (hist, # shape: [bs * num_hist, num_rounds, hidden_size]
                 hist_mask.long(), # shape [bs * num_hist, num_rounds]

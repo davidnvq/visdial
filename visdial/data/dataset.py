@@ -56,8 +56,6 @@ class VisDialDataset(Dataset):
 		item = dict()
 		item['img_ids'] = torch.tensor(image_id)
 
-		print('img_id', item['img_ids'])
-
 		item['num_rounds'] = torch.tensor(visdial_instance['num_rounds'])
 
 		return_elements = [

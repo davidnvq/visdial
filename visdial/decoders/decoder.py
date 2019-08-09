@@ -45,6 +45,7 @@ class DiscriminativeDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.split = self.config['model']['split']
 
         self.word_embed = nn.Embedding(
             config['model']['vocab_size'],
@@ -144,6 +145,9 @@ class DiscriminativeDecoder(nn.Module):
         # shape: [BS, NR, NO]
         scores = scores.squeeze(-1)
 
+        if self.split == 'test':
+            scores = scores[:, batch['num_rounds'] - 1]
+
         return {'opt_scores': scores}
 
 
@@ -172,7 +176,7 @@ class GenerativeDecoder(nn.Module):
     def __init__(self, config):
         super(GenerativeDecoder, self).__init__()
         self.config = config
-
+        self.split = self.config['model']['split']
         self.word_embed = nn.Embedding(
             config['model']['vocab_size'],
             config['model']['embedding_size'],
@@ -209,7 +213,6 @@ class GenerativeDecoder(nn.Module):
         self.answer_rnn.flatten_parameters()
 
         if self.training:
-
             # shape: [BS, NH, SEQ]
             ans_in = batch["ans_in"]
             (BS, NH, SEQ), HS = ans_in.size(), self.config['model']['hidden_size']
@@ -235,9 +238,18 @@ class GenerativeDecoder(nn.Module):
             return {'ans_out_scores' : self.lstm_to_words(ans_out).view(BS, NH, SEQ, -1)}
 
         else:
-            # shape: [BS, NH, NO, SEQ]
             opts_in = batch["opts_in"]
+            target_opts_out = batch["opts_out"]
+
+            if self.split == 'test':
+                # shape: [BS, NH, NO, SEQ]
+                opts_in = opts_in[:, batch['num_rounds'] - 1]
+                # shape: [BS x NH x NO, SEQ]
+                target_opts_out = batch["opts_out"][:, batch['num_rounds'] - 1]
+
             BS, NH, NO, SEQ = opts_in.size()
+
+            target_opts_out = target_opts_out.view(BS * NH * NO, -1)
 
             # shape: [BS x NH x NO, SEQ]
             opts_in = opts_in.view(BS * NH * NO, SEQ)
@@ -269,9 +281,6 @@ class GenerativeDecoder(nn.Module):
             opts_word_scores = self.logsoftmax(self.lstm_to_words(opts_out))
 
             # shape: [BS x NH x NO, SEQ]
-            target_opts_out = batch["opts_out"].view(BS * NH * NO, -1)
-
-            # shape: [BS x NH x NO, SEQ]
             opts_out_scores = torch.gather(opts_word_scores, -1, target_opts_out.unsqueeze(-1)).squeeze()
             # ^ select the scores for target word in [vocab vector] of each word
 
@@ -286,3 +295,57 @@ class GenerativeDecoder(nn.Module):
             opts_out_scores = opts_out_scores.view(BS, NH, NO)
 
             return {'opts_out_scores' : opts_out_scores}
+
+
+            # else:
+            #     # shape: [BS, NH, NO, SEQ]
+            #     opts_in = batch["opts_in"]
+            #     last_round = batch['num_rounds'] - 1
+            #
+            #     # shape: [BS, NO, SEQ]
+            #     opts_in = opts_in[:, last_round]
+            #     print('opts_in shape', opts_in.shape)
+            #     BS, _, NO, SEQ = opts_in.size()
+            #
+            #     # shape: [BS x NO, SEQ]
+            #     opts_in = opts_in.view(BS * NO, SEQ)
+            #
+            #     # shape: [BS x NO, WE]
+            #     opts_in_embed = self.word_embed(opts_in)
+            #
+            #     # reshape encoder output to be set as initial hidden state of LSTM.
+            #
+            #     # shape: [BS, 1, HS]
+            #     init_hidden = encoder_output.view(BS, 1, -1)
+            #
+            #     # shape: [BS, NO, HS]
+            #     init_hidden = init_hidden.repeat(1, NO, 1)
+            #
+            #     num_lstm_layers = 2
+            #     # shape: [lstm_layers, BS x NO, HS]
+            #     init_hidden = init_hidden.repeat(num_lstm_layers, 1, 1)
+            #     init_cell = torch.zeros_like(init_hidden)
+            #
+            #     # shape: [BS x NO, SEQ, HS]
+            #     opts_out, (_, _) = self.answer_rnn(opts_in_embed, (init_hidden, init_cell))
+            #
+            #     # shape: [BS x NO, SEQ, VC]
+            #     opts_word_scores = self.logsoftmax(self.lstm_to_words(opts_out))
+            #
+            #     # shape: [BS x NO, SEQ]
+            #     target_opts_out = batch["opts_out"][:, last_round].view(BS * NO, -1)
+            #
+            #     # shape: [BS x NO, SEQ]
+            #     opts_out_scores = torch.gather(opts_word_scores, -1, target_opts_out.unsqueeze(-1)).squeeze()
+            #     # ^ select the scores for target word in [vocab vector] of each word
+            #
+            #     # shape: [BS x NO, SEQ] <- remove the <PAD> word
+            #     opts_out_scores = (opts_out_scores * (target_opts_out > 0).float())
+            #
+            #     # sum all the scores for each word in the predicted answer -> final score
+            #     # shape: [BS x NO]
+            #     opts_out_scores = torch.sum(opts_out_scores, dim=-1)
+            #
+            #     # shape: [BS, NO]
+            #     opts_out_scores = opts_out_scores.view(BS, NO)
+            #     return {'opts_out_scores' : opts_out_scores}
