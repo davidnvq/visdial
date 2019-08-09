@@ -1,1 +1,1 @@
-from .tensors import move_to_cuda
+from .tensor_utils import move_to_cuda

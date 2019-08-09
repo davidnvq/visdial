@@ -139,3 +139,29 @@ def draw_detections(image, boxes, scores, labels, color=(255, 0, 0), label_to_na
 		plt.imshow(drawn_image)
 		plt.show()
 	return drawn_image
+
+
+def test_draw_boxes_with_scores():
+	from torch.utils.data import DataLoader
+	from PIL import Image
+	from visdial.data import VisDialDataset
+	from configs.attn_disc_lstm_config import get_attn_disc_lstm_config
+
+	config = get_attn_disc_lstm_config()
+
+	dir_path = '/home/quanguet/datasets/visdial/raw_images/VisualDialog_val2018'
+	pattern = 'VisualDialog_val2018_000000{:06d}.jpg'
+
+	dataset = VisDialDataset(config, split='test', is_detectron=True)
+	dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
+	for batch in dataloader:
+		break
+
+	img_id = batch['img_ids'][0]
+	boxes = batch['boxes'][0].numpy()
+	scores = np.ones(len(boxes))
+	img_path = img_id_to_path(img_id, dir_path, pattern)
+	img = Image.open(img_path)
+	print(scores)
+
+	return Image.fromarray(draw_boxes_with_scores(np.array(img), boxes, scores, topk=20))

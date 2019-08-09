@@ -4,6 +4,7 @@ import os
 osp = os.path.join
 
 HOME_PATH = '/media/local_workspace/quang'
+HOME_PATH = '/home/quanguet'
 DATA_PATH = f'{HOME_PATH}/datasets/visdial'
 
 EXTENTION = 'v1.0'
@@ -72,7 +73,9 @@ CONFIG = {
 			},
 
 		'test'             : {
-			'path_feat_img': osp(DATA_PATH, 'legacy/features_faster_rcnn_x101_test.h5'),
+			'path_feat_img'          : osp(DATA_PATH, 'legacy/features_faster_rcnn_x101_test.h5'),
+			'path_json_dialogs'      : osp(DATA_PATH, 'annotations/visdial_1.0_test.json'),
+			'path_json_dense_dialogs': ''
 			}
 		}
 	}
