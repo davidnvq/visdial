@@ -24,10 +24,10 @@ from visdial.model import get_model
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", default="attn_misc_lstm")
-parser.add_argument("--weights", default="")
-parser.add_argument("--split", default="")
-parser.add_argument("--decoder_type", default='misc')
-parser.add_argument("--save-ranks-path", default="logs/val_{}_ranks.json")
+parser.add_argument("--weights", default="/home/quanguet/checkpoints/visdial/attn_misc_lstm_v2_24_July_seed_1994/fixed_checkpoint_21.pth")
+parser.add_argument("--split", default="test")
+parser.add_argument("--decoder_type", default='disc')
+parser.add_argument("--save-ranks-path", default="/home/quanguet/checkpoints/visdial/attn_misc_lstm_v2_24_July_seed_1994/test_{}_ranks.json")
 
 # For reproducibility.
 # Refer https://pytorch.org/docs/stable/notes/randomness.html
@@ -42,9 +42,9 @@ torch.backends.cudnn.deterministic = True
 
 args = parser.parse_args()
 
-from configs import get_config
+from configs.evaluate_config import get_attn_misc_lstm_config
 
-config = get_config(config_name=args.config)
+config = get_attn_misc_lstm_config()
 print(json.dumps(config, indent=2))
 
 # =============================================================================
@@ -98,6 +98,7 @@ for _, batch in enumerate(tqdm(dataloader)):
 		output = (output['opt_scores'] + output['opts_out_scores'])/2.0
 
 	ranks = scores_to_ranks(output)
+	# print("ranks.shape", ranks.shape)
 	all_outputs.append(output.cpu())
 	all_img_ids.append(batch['img_ids'].cpu())
 	all_round_ids.append(batch['num_rounds'].cpu())
@@ -112,7 +113,7 @@ for _, batch in enumerate(tqdm(dataloader)):
 						"round_id": int(batch["num_rounds"][i].item()),
 						"ranks"   : [
 							rank.item()
-							for rank in ranks[i][batch["num_rounds"][i] - 1]
+							for rank in ranks[i][0]#[batch["num_rounds"][i] - 1]
 							],
 						}
 					)

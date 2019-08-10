@@ -39,6 +39,8 @@ class VisDialDataset(Dataset):
 
 		if config['dataset']['overfit']:
 			self.image_ids = self.image_ids[:32]
+		if config['solver']['finetune']:
+			self.image_ids = self.dense_ann_feat_reader._image_ids
 
 	def __len__(self):
 		return len(self.image_ids)
@@ -245,10 +247,16 @@ class VisDialDataset(Dataset):
 	def return_gt_relev_to_item(self, image_id):
 		if self.dense_ann_feat_reader is not None:
 			dense_annotations = self.dense_ann_feat_reader[image_id]
-			return {
-				"gt_relevance": torch.tensor(dense_annotations["gt_relevance"]).float(),
-				"round_id"    : torch.tensor(dense_annotations["round_id"]).long()
-				}
+			if self.split == 'train':
+				return {
+					"gt_relevance": torch.tensor(dense_annotations["relevance"]).float(),
+					"round_id"    : torch.tensor(dense_annotations["round_id"]).long()
+					}
+			else:
+				return {
+					"gt_relevance": torch.tensor(dense_annotations["gt_relevance"]).float(),
+					"round_id"    : torch.tensor(dense_annotations["round_id"]).long()
+					}
 		else:
 			return {}
 

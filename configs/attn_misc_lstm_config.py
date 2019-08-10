@@ -4,10 +4,10 @@ import os
 osp = os.path.join
 
 HOME_PATH = '/media/local_workspace/quang'
-# HOME_PATH = '/home/quanguet'
+HOME_PATH = '/home/quanguet'
 DATA_PATH = f'{HOME_PATH}/datasets/visdial'
 
-EXTENTION = 'v1.2.1'
+EXTENTION = 'v1.2.0'
 CONFIG_NAME = 'attn_misc_lstm'
 
 CONFIG = {
@@ -18,15 +18,19 @@ CONFIG = {
 	'callbacks'    : {
 		'validate'            : True,
 		'resume'              : False,
-		'path_pretrained_ckpt': '',
-		'path_dir_save_ckpt'  : f'{HOME_PATH}/checkpoints/visdial/reborn/{CONFIG_NAME}_{EXTENTION}'
+		'path_pretrained_ckpt': '/home/quanguet/checkpoints/visdial/attn_misc_lstm_v2_24_July_seed_1994/fixed_checkpoint_21.pth', # fintune
+		'path_dir_save_ckpt'  : '/home/quanguet/checkpoints/visdial/attn_misc_lstm_v2_24_July_seed_1994/finetune' # fintune
+
+		# 'path_dir_save_ckpt'  : f'{HOME_PATH}/checkpoints/visdial/reborn/{CONFIG_NAME}_{EXTENTION}'
 		},
 
 	'solver'       : {
-		'num_epochs' : 30,
+		'num_epochs' : 10, #finetune
 		'batch_size' : 8,
 		'cpu_workers': 16,
-		'init_lr'    : 1e-3,
+		'init_lr'    : 1e-5,
+		'finetune'   : True, # finetune
+		'training_splits' : 'trainval', # finetune
 		'lr_steps'   : [4, 8, 12, 16, 20, 24, 26],
 		},
 
@@ -41,7 +45,8 @@ CONFIG = {
 		'encoder_type'              : 'attn',
 		'encoder_memory_size'       : 2,
 		'encoder_num_heads'         : 4,
-		'encoder_num_cross_attns'   : 1,
+		'encoder_num_cross_attns'   : 2,
+
 		'embedding_has_position'    : True,
 		'embedding_has_hidden_layer': False,
 		'embedding_size'            : 300,
@@ -64,7 +69,7 @@ CONFIG = {
 			'path_feat_img'          : osp(DATA_PATH, 'legacy/features_faster_rcnn_x101_train.h5'),
 			'path_json_dialogs'      : osp(DATA_PATH, 'annotations/visdial_1.0_train.json'),
 			'path_json_word_count'   : osp(DATA_PATH, 'annotations/visdial_1.0_word_counts_train.json'),
-			'path_json_dense_dialogs': ''
+			'path_json_dense_dialogs': osp(DATA_PATH, 'annotations/visdial_1.0_train_dense_sample.json') #finetune
 			},
 
 		'val'              : {

@@ -6,6 +6,7 @@ k2: clean
 	--exclude=*pyc \
 	--exclude=*idea \
 	--exclude=*ignore \
+	--exclude=*.json \
 	--exclude=*.ipynb \
 	--exclude=*DS_Store \
 	--exclude=__pycache__ \

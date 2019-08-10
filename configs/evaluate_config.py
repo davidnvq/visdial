@@ -7,7 +7,7 @@ HOME_PATH = '/media/local_workspace/quang'
 HOME_PATH = '/home/quanguet'
 DATA_PATH = f'{HOME_PATH}/datasets/visdial'
 
-EXTENTION = 'v1.0'
+EXTENTION = 'v1.2.1'
 CONFIG_NAME = 'attn_misc_lstm'
 
 CONFIG = {
@@ -46,7 +46,7 @@ CONFIG = {
 		'embedding_has_hidden_layer': False,
 		'embedding_size'            : 300,
 		'share_attn'                : False,
-		'split' : 'test'
+		'split'                     : 'test'
 		},
 
 	'dataset'      : {
