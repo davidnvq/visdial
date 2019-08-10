@@ -32,13 +32,15 @@ class VisDialDataset(Dataset):
 		self.is_add_boundaries = self._get_is_add_boundaries(config)
 		self.is_return_options = self._get_is_return_options(config, split)
 
-		self.img_feat_reader = self._get_img_feat_reader(config, split)
-		self.ann_feat_reader = self._get_ann_feat_reader(config, split)
 		self.dialogs_reader = DialogsReader(config, split)
+		self.img_feat_reader = self._get_img_feat_reader(config, split)
+		self.dense_ann_feat_reader = self._get_dense_ann_feat_reader(config, split)
 		self.image_ids = list(self.dialogs_reader.dialogs.keys())
 
 		if config['dataset']['overfit']:
 			self.image_ids = self.image_ids[:32]
+		if config['solver']['finetune']:
+			self.image_ids = self.dense_ann_feat_reader._image_ids
 
 	def __len__(self):
 		return len(self.image_ids)
@@ -55,6 +57,7 @@ class VisDialDataset(Dataset):
 
 		item = dict()
 		item['img_ids'] = torch.tensor(image_id)
+
 		item['num_rounds'] = torch.tensor(visdial_instance['num_rounds'])
 
 		return_elements = [
@@ -79,7 +82,7 @@ class VisDialDataset(Dataset):
 		return config['dataset']['is_return_options']
 
 
-	def _get_ann_feat_reader(self, config, split):
+	def _get_dense_ann_feat_reader(self, config, split):
 		path = config['dataset'][split]['path_json_dense_dialogs']
 		if os.path.isfile(path):
 			annotations_reader = DenseAnnotationsReader(path)
@@ -148,87 +151,16 @@ class VisDialDataset(Dataset):
 		return maxpadded_sequences.long(), torch.tensor(sequence_lengths).long()
 
 
-	def _get_history(self, caption, questions, answers):
-		# Allow double length of caption, equivalent to a concatenated QA pair.
-		caption = caption[: self.config['dataset']['max_seq_len'] * 2]
-
-		for i in range(len(questions)):
-			questions[i] = questions[i][: self.config['dataset']['max_seq_len']]
-
-		for i in range(len(answers)):
-			if self.config['dataset']['is_add_boundaries']:
-				answers[i] = answers[i][1: -1]
-			else:
-				answers[i] = answers[i][: self.config['dataset']['max_seq_len']]
-
-
-		# History for first round is caption, else concatenated QA pair of
-		# previous round.
-		history = []
-		history.append(caption + [self.tokenizer.EOS_INDEX])
-		for question, answer in zip(questions, answers):
-			history.append(question + answer + [self.tokenizer.EOS_INDEX])
-		# Drop last entry from history (there's no eleventh question).
-		history = history[:-1]
-		max_history_length = self.config['dataset']['max_seq_len'] * 2
-
-		round_tokens, round_lens = self.do_padding(history, max_seq_len=max_history_length)
-
-
-		# 10 dialog histories
-		# 1 - caption
-		# 2 - caption, round1
-		# 3 - caption, round1, round2
-		# ....
-		# 10 caption, round1, round2, ..., round9
-
-		concat_hist_tokens = []
-		for i in range(0, len(history)):
-			concat_hist_tokens.append([])
-			for j in range(i + 1):
-				concat_hist_tokens[i].extend(history[j])
-
-		concat_hist_tokens, concat_hist_lens = self.do_padding(
-			concat_hist_tokens,
-			max_seq_len=max_history_length * 10)
-
-		return round_tokens, round_lens, concat_hist_tokens, concat_hist_lens
-
-		# if self.split != 'test':
-		# 	ten_hist_tokens = []
-		# 	ten_hist_lens = []
-		# 	for i in range(10):
-		# 		rounds = history[0:i+1]
-		# 		rounds, round_lens = self.do_padding(rounds, max_seq_len=max_history_length)
-		#
-		# 		ten_round_hist = torch.full((10, max_history_length), fill_value=0)
-		# 		# print('rounds', rounds.size())
-		# 		# print('round_lens', round_lens.size())
-		# 		ten_round_hist[:rounds.size(0), :] = rounds
-		#
-		# 		ten_round_lens = torch.full((10,), fill_value=0)
-		# 		ten_round_lens[:rounds.size(0)] = round_lens
-		#
-		# 		ten_hist_tokens.append(ten_round_hist)
-		# 		ten_hist_lens.append(ten_round_lens)
-		#
-		# 	ten_hist_tokens = torch.stack(ten_hist_tokens, dim=0)
-		# 	ten_hist_lens = torch.stack(ten_hist_lens, dim=0)
-		# 	return ten_hist_tokens, ten_hist_lens
-
-
 	def tokens_to_ids(self, tokens, is_caption=False):
 		if is_caption:
 			tokens = tokens[:self.config['dataset']['max_seq_len'] * 2]
 		tokens = tokens[:self.config['dataset']['max_seq_len']]
 		return self.tokenizer.convert_tokens_to_ids(tokens)
 
-
 	def tokens_to_ids_with_boundary(self, tokens):
 		tokens = tokens[:self.config['dataset']['max_seq_len'] - 2]
 		tokens = [self.tokenizer.SOS_TOKEN] + tokens + [self.tokenizer.EOS_TOKEN]
 		return self.tokens_to_ids(tokens)
-
 
 	def convert_opt_tokens_to_ids(self, dialog):
 		for round in range(len(dialog)):
@@ -273,6 +205,7 @@ class VisDialDataset(Dataset):
 		ans_opts = torch.stack(ans_opts, dim=0)
 		ans_opts_in = torch.stack(ans_opts_in, dim=0)
 		ans_opts_out = torch.stack(ans_opts_out, dim=0)
+
 		return {
 			'opts'    : ans_opts,
 			'opts_in' : ans_opts_in,
@@ -283,9 +216,12 @@ class VisDialDataset(Dataset):
 			}
 
 	def return_answers_to_item(self, dialog):
-		for round in range(len(dialog)):
-			tokens = [self.tokenizer.SOS_TOKEN] + dialog[round]['answer'] + [self.tokenizer.EOS_TOKEN]
-			dialog[round]['answer'] = self.tokens_to_ids(tokens)
+		if self.split == 'test':
+			return {}
+
+		for round_idx in range(len(dialog)):
+			tokens = [self.tokenizer.SOS_TOKEN] + dialog[round_idx]['answer'] + [self.tokenizer.EOS_TOKEN]
+			dialog[round_idx]['answer'] = self.tokens_to_ids(tokens)
 
 		round_answers = [dialog_round["answer"] for dialog_round in dialog]
 		result = self.do_padding(round_answers, start=1, end=-1)
@@ -309,25 +245,77 @@ class VisDialDataset(Dataset):
 			return {}
 
 	def return_gt_relev_to_item(self, image_id):
-		if "val" in self.split:
-			dense_annotations = self.ann_feat_reader[image_id]
-			return {
-				"gt_relevance": torch.tensor(dense_annotations["gt_relevance"]).float(),
-				"round_id"    : torch.tensor(dense_annotations["round_id"]).long()
-				}
+		if self.dense_ann_feat_reader is not None:
+			dense_annotations = self.dense_ann_feat_reader[image_id]
+			if self.split == 'train':
+				return {
+					"gt_relevance": torch.tensor(dense_annotations["relevance"]).float(),
+					"round_id"    : torch.tensor(dense_annotations["round_id"]).long()
+					}
+			else:
+				return {
+					"gt_relevance": torch.tensor(dense_annotations["gt_relevance"]).float(),
+					"round_id"    : torch.tensor(dense_annotations["round_id"]).long()
+					}
 		else:
 			return {}
 
-	def return_bert_feats_to_item(self, visdial_instance):
-		# get bert features
-		if self.config['model']['encoder']['txt_embeddings']['type'] == 'bert':
-			return {
-				'ques_feats': torch.tensor(visdial_instance['ques_feats']),
-				'hist_feats': torch.tensor(visdial_instance['hist_feats']),
-				'ques_masks': torch.tensor(visdial_instance['ques_masks']).long()
-				}
-		else:
-			return {}
+
+	def _get_history(self, caption, questions, answers):
+		# Allow double length of caption, equivalent to a concatenated QA pair.
+
+		caption = caption[: self.config['dataset']['max_seq_len'] * 2]
+
+		# print("len(questions)", len(questions))
+		for i in range(len(questions)):
+			questions[i] = questions[i][: self.config['dataset']['max_seq_len']]
+			# print('question', questions[i])
+
+		# print('len(answers)', len(answers))
+		for i in range(len(answers)):
+			# print('answer', answers[i])
+			if self.config['dataset']['is_add_boundaries'] and self.split != 'test':
+				answers[i] = answers[i][1: -1]
+			else:
+				answers[i] = answers[i][: self.config['dataset']['max_seq_len']]
+
+		# History for first round is caption, else concatenated QA pair of
+		# previous round.
+		history = []
+		history.append(caption + [self.tokenizer.EOS_INDEX])
+
+		for question, answer in zip(questions, answers):
+			if len(question) == 0:
+				break
+			history.append(question + answer + [self.tokenizer.EOS_INDEX])
+
+		# print('history', history)
+		# Drop last entry from history (there's no eleventh question).
+		history = history[:-1]
+		max_history_length = self.config['dataset']['max_seq_len'] * 2
+		round_tokens, round_lens = self.do_padding(history, max_seq_len=max_history_length)
+
+		return round_tokens, round_lens
+
+		# 10 dialog histories
+		# 1 - caption
+		# 2 - caption, round1
+		# 3 - caption, round1, round2
+		# ....
+		# 10 caption, round1, round2, ..., round9
+
+		# concat_hist_tokens = []
+		# for i in range(0, len(history)):
+		# 	concat_hist_tokens.append([])
+		# 	for j in range(i + 1):
+		# 		concat_hist_tokens[i].extend(history[j])
+		#
+		# concat_hist_tokens, concat_hist_lens = self.do_padding(
+		# 	concat_hist_tokens,
+		# 	max_seq_len=max_history_length * 10)
+
+		# return round_tokens, round_lens, concat_hist_tokens, concat_hist_lens
+
 
 	def return_token_feats_to_item(self, visdial_instance):
 		if self.config['model']['tokenizer'] == 'nlp':
@@ -338,12 +326,16 @@ class VisDialDataset(Dataset):
 			caption = self.tokens_to_ids(caption)
 
 			for i in range(len(dialog)):
+				# print(f'question {i}: {dialog[i]["question"]}')
+				# print(f'answer {i}: {dialog[i]["answer"]}')
 				dialog[i]["question"] = self.tokens_to_ids(dialog[i]["question"])
+				if self.split == 'test':
+					dialog[i]["answer"] = self.tokens_to_ids(dialog[i]['answer'])
 
 			sequences = [dialog_round["question"] for dialog_round in dialog]
 			ques_tokens, ques_lens = self._pad_sequences(sequences)
 
-			hist_tokens, hist_lens, concat_hist_tokens, concat_hist_lens = self._get_history(
+			hist_tokens, hist_lens = self._get_history(
 					caption,
 					[dialog_round["question"] for dialog_round in dialog],
 					[dialog_round["answer"] for dialog_round in dialog],
@@ -353,9 +345,7 @@ class VisDialDataset(Dataset):
 				'ques_tokens': ques_tokens.long(),
 				'hist_tokens': hist_tokens.long(),
 				'ques_len'   : ques_lens.long(),
-				'hist_len'   : hist_lens.long(),
-				'concat_hist_tokens' : concat_hist_tokens.long(),
-				'concat_hist_len' : concat_hist_lens.long()
+				'hist_len'   : hist_lens.long()
 				}
 		else:
 			return {}
@@ -405,7 +395,7 @@ class VisDialDataset(Dataset):
 		dialog = visdial_instance['dialog']
 
 		if "val" in self.split:
-			dense_annotations = self.ann_feat_reader[image_id]
+			dense_annotations = self.dense_ann_feat_reader[image_id]
 
 		gt_relevance = torch.tensor(dense_annotations["gt_relevance"]).float()
 		round_id = torch.tensor(dense_annotations["round_id"]).long()
@@ -428,6 +418,11 @@ def get_config():
 	with open(path, 'r') as f:
 		config = json.load(f)
 	return config
+
+
+def test_TestSplitDataset(config):
+
+	pass
 
 
 def test_visdial_dataset(config):

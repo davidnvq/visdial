@@ -24,6 +24,8 @@ class Encoder(nn.Module):
 
 	def forward(self, batch):
 		BS, NH = batch['ques_len'].shape
+		if self.img_encoder.split == 'test':
+			NH = 1
 
 		# [BS x NH, NR, HS] hist
 		# [BS x NH, SQ, HS] ques
@@ -31,8 +33,8 @@ class Encoder(nn.Module):
 		# [BS x NR, SQ] ques_mask
 		hist, ques, hist_mask, ques_mask = self.text_encoder(batch)
 
-		# [BS, NP, HS] img
-		# [BS, NP] img_mask
+		# [BS x NH, NP, HS] img
+		# [BS x NH, NP] img_mask
 		img, img_mask = self.img_encoder(batch)
 
 		batch_input = img, hist, ques, img_mask, hist_mask, ques_mask

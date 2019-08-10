@@ -62,14 +62,15 @@ def get_attn_encoder(config):
 	encoder = Encoder(
 			text_encoder=TextEncoder(
 					text_embeddings,
-					HistEncoder(get_lstm(config), hidden_size=config['model']['hidden_size']),
-					QuesEncoder(get_lstm(config), hidden_size=config['model']['hidden_size']),
+					HistEncoder(get_lstm(config), hidden_size=config['model']['hidden_size'], split=config['model']['split']),
+					QuesEncoder(get_lstm(config), hidden_size=config['model']['hidden_size'], split=config['model']['split']),
 					),
 
 			img_encoder=ImageEncoder(
 					dropout=config['model']['dropout'],
 					hidden_size=config['model']['hidden_size'],
-					img_feat_size=config['model']['img_feature_size']
+					img_feat_size=config['model']['img_feature_size'],
+					split=config['model']['split']
 					),
 			attn_encoder=CrossAttentionEncoder(
 					hidden_size=config['model']['hidden_size'],

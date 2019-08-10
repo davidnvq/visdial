@@ -104,7 +104,9 @@ class DialogsReader(object):
 
 			print(f"[{self._split}] Tokenizing questions...")
 			for i in tqdm(range(len(self.questions))):
-				self.questions[i] = self.do_tokenize(self.questions[i] + "?")
+				# print('len(self.questions[i])', len(self.questions[i]))
+				self.questions[i] = self.questions[i] + "?" if len(self.questions[i]) > 0 else self.questions[i]
+				self.questions[i] = self.do_tokenize(self.questions[i])
 
 			print(f"[{self._split}] Tokenizing answers...")
 			for i in tqdm(range(len(self.answers))):
