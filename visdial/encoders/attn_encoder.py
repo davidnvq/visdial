@@ -11,10 +11,6 @@ class NormalSubLayer(nn.Module):
 		                            nn.ReLU(inplace=True),
 		                            nn.Dropout(p=dropout))
 
-		# nn.init.kaiming_uniform_(self.linear[0].weight)
-		# nn.init.constant_(self.linear[0].bias, 0)
-
-
 	def forward(self, x):
 		"""x: shape [batch_size, M, hidden_size*3]"""
 		return self.linear(x)

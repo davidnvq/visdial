@@ -27,6 +27,8 @@ CONFIG = {
 		'batch_size' : 8,
 		'cpu_workers': 16,
 		'init_lr'    : 1e-3,
+		'finetune' : False,
+		'training_splits': 'train',  # finetune
 		'lr_steps'   : [4, 8, 12, 16, 20, 24, 26],
 		},
 
