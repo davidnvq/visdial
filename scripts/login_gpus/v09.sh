@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 #!/usr/bin/env sh
-#$-pe gpu 8
-#$-l gpu=8
+#$-pe gpu 4
+#$-l gpu=4
 #$-j y
 #$-cwd
 #$-V
