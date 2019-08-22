@@ -6,11 +6,9 @@
 #$-j y
 #$-cwd
 #$-V
-#$-o /home/quang/log/v14.log
+#$-o /home/quang/workspace/log/temp/v14.log
 #$-q main.q@yagi14.vision.is.tohoku
 
 export CUDA_VISIBLE_DEVICES=$SGE_GPU
 
-python net_linear.py \
---config attn_disc_lstm \
->> /home/quang/log/v14.txt
+python net_linear.py >> /home/quang/workspace/log/temp/v14.txt
