@@ -35,10 +35,10 @@ def get_comet_experiment(config, is_online=False, offline_dir=None):
 				workspace='lightcv',
 				offline_directory=offline_dir)
 
-
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", default="attn_disc_lstm")
 parser.add_argument('--online', action='store_true')
+
 args = parser.parse_args()
 
 # =============================================================================
