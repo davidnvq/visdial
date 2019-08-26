@@ -55,7 +55,8 @@ class DialogsReader(object):
 			self.tokenize = BertTokenizer.from_pretrained('bert-base-uncased').tokenize
 
 		self.config = config
-		path_json_dialogs = config['dataset'][split]['path_json_dialogs']
+
+		path_json_dialogs = config['dataset'][f"{split}_json_dialog_path"]
 
 		with open(path_json_dialogs, "r") as visdial_file:
 			visdial_data = json.load(visdial_file)
@@ -363,10 +364,9 @@ class ImageFeaturesHdfReader(object):
 		RAM - trade-off between speed and memory.
 	"""
 
-	def __init__(self, features_hdfpath, is_detectron=False, is_legacy=False):
+	def __init__(self, features_hdfpath, is_legacy=False):
 		self.features_hdfpath = features_hdfpath
 		self.is_legacy = is_legacy
-		self.is_detectron = is_detectron
 
 		with h5py.File(self.features_hdfpath, "r") as features_hdf:
 			self._split = features_hdf.attrs["split"]
@@ -381,14 +381,6 @@ class ImageFeaturesHdfReader(object):
 			with h5py.File(self.features_hdfpath, "r") as features_hdf:
 				image_id_features = features_hdf["features"][index]
 			return image_id_features
-
-		if self.is_detectron:
-			with h5py.File(self.features_hdfpath, "r") as features_hdf:
-				image_id_features = features_hdf["features"][index]
-				boxes = features_hdf["boxes"][index]
-				classes = features_hdf["classes"][index]
-				scores = features_hdf["scores"][index]
-			return image_id_features, boxes, classes, scores
 
 		with h5py.File(self.features_hdfpath, "r") as features_hdf:
 			image_id_features = features_hdf["features"][index]

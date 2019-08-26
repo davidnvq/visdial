@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import List
 import os
 
 import torch
@@ -21,16 +21,15 @@ class VisDialDataset(Dataset):
 	history, ground truth answer, answer options, dense annotations etc.
 	"""
 
-	def __init__(self, config, split="train", is_detectron=False):
+	def __init__(self, config, split="train"):
 
 		super().__init__()
 		self.config = config
 		self.split = split
 		self.is_legacy = config['dataset']['is_legacy']
-		self.is_detectron = is_detectron
 		self.tokenizer = self._get_tokenizer(config)
 		self.is_add_boundaries = self._get_is_add_boundaries(config)
-		self.is_return_options = self._get_is_return_options(config, split)
+		self.is_return_options = self._get_is_return_options(config)
 
 		self.dialogs_reader = DialogsReader(config, split)
 		self.img_feat_reader = self._get_img_feat_reader(config, split)
@@ -39,7 +38,7 @@ class VisDialDataset(Dataset):
 
 		if config['dataset']['overfit']:
 			self.image_ids = self.image_ids[:32]
-		if config['solver']['finetune']:
+		if config['dataset']['finetune']:
 			self.image_ids = self.dense_ann_feat_reader._image_ids
 
 	def __len__(self):
@@ -78,28 +77,24 @@ class VisDialDataset(Dataset):
 	def _get_is_add_boundaries(self, config):
 		return config['dataset']['is_add_boundaries']
 
-	def _get_is_return_options(self, config, split):
+	def _get_is_return_options(self, config):
 		return config['dataset']['is_return_options']
 
 
 	def _get_dense_ann_feat_reader(self, config, split):
-		path = config['dataset'][split]['path_json_dense_dialogs']
-		if os.path.isfile(path):
-			annotations_reader = DenseAnnotationsReader(path)
-		else:
-			annotations_reader = None
-		return annotations_reader
+		path = config['dataset'].get(f'{split}_json_dense_dialog_path', None)
+		return DenseAnnotationsReader(path) if path is not None else None
 
 	def _get_img_feat_reader(self, config, split):
-		path = config['dataset'][split]['path_feat_img']
-		hdf_reader = ImageFeaturesHdfReader(path, self.is_detectron, self.is_legacy)
+		path = config['dataset'][f'{split}_feat_img_path']
+		hdf_reader = ImageFeaturesHdfReader(path, self.is_legacy)
 		return hdf_reader
 
 	def _get_tokenizer(self, config):
 		if config['model']['tokenizer'] == 'bert':
 			return BertTokenizer.from_pretrained("bert-base-uncased", do_lower_case=True)
 		else:
-			path = config['dataset']['train']['path_json_word_count']
+			path = config['dataset']['train_json_word_count_path']
 			return Vocabulary(word_counts_path=path)
 
 
@@ -359,19 +354,6 @@ class VisDialDataset(Dataset):
 				img_feat = normalize(img_feat, dim=0, p=2)
 
 			return {'img_feat' : img_feat}
-
-		if self.is_detectron:
-			img_feat, boxes, classes, scores = self.img_feat_reader[image_id]
-			img_feat = torch.tensor(img_feat)
-			boxes = torch.tensor(boxes)
-
-			# Normalize image features at zero-th dimension
-			# (since there's no batch dimension).
-			if self.config['dataset']["img_norm"]:
-				img_feat = normalize(img_feat, dim=0, p=2)
-
-			return {'img_feat': img_feat,
-			        'boxes'   : boxes}
 
 		else:
 			img_feat, img_w, img_h, boxes  = self.img_feat_reader[image_id]

@@ -14,8 +14,8 @@ k2: clean
 	../visdial quang@k2:/home/quang/repos
 
 clean:
-	find '.' -name '*.ipynb_checkpoints' -exec rm -r {} +
 	find '.' -name '*DS_Store' -exec rm -r {} +
+	find '.' -name '*__pycache__' -exec rm -r {} +
 
 git: clean
 	git add .

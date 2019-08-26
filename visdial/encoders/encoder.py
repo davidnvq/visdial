@@ -24,7 +24,7 @@ class Encoder(nn.Module):
 
 	def forward(self, batch):
 		BS, NH = batch['ques_len'].shape
-		if self.img_encoder.split == 'test':
+		if self.img_encoder.test_mode:
 			NH = 1
 
 		# [BS x NH, NR, HS] hist

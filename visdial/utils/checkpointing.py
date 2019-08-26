@@ -116,11 +116,11 @@ class CheckpointManager(object):
 			return self.model.state_dict()
 
 
-def load_checkpoint(model, optimizer, checkpoint_pthpath='', device='cuda', resume=False):
+def load_checkpoint(model, optimizer, checkpoint_pthpath=None, device='cuda', resume=False):
 	"""Load checkpoint"""
 	# load encoder, decoder, optimizer state_dicts
 
-	if os.path.exists(checkpoint_pthpath) and os.path.isfile(checkpoint_pthpath):
+	if checkpoint_pthpath is not None:
 		components = torch.load(checkpoint_pthpath, map_location=device)
 		print("Loaded model from {}".format(checkpoint_pthpath))
 		print('At epoch:', components.get('epoch'))

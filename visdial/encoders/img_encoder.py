@@ -3,7 +3,7 @@ from torch import nn
 
 class ImageEncoder(nn.Module):
 
-	def __init__(self, img_feat_size, hidden_size, dropout=0.0, split='train'):
+	def __init__(self, img_feat_size, hidden_size, dropout=0.0, test_mode=False):
 		super(ImageEncoder, self).__init__()
 
 		self.img_linear = nn.Sequential(
@@ -11,12 +11,12 @@ class ImageEncoder(nn.Module):
 				# ReDAN use tanh here
 				nn.Dropout(p=dropout)
 				)
-		self.split = split
+		self.test_mode = test_mode
 
 	def forward(self, batch):
 		bs, num_hist, _ = batch['ques_tokens'].size()
 
-		if self.split =='test':
+		if self.test_mode:
 			num_hist = 1
 
 		# shape: [batch_size, num_proposals, img_feat_size]

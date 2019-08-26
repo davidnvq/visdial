@@ -44,12 +44,12 @@ class TextEncoder(nn.Module):
 
 class QuesEncoder(nn.Module):
 
-    def __init__(self, text_encoder, hidden_size, split='train'):
+    def __init__(self, text_encoder, hidden_size, test_mode=False):
         super(QuesEncoder, self).__init__()
         self.hidden_size = hidden_size
         self.encoder = text_encoder
         self.ques_linear = nn.Linear(hidden_size*2, hidden_size)
-        self.split = split
+        self.test_mode = test_mode
 
 
     def forward(self, ques, ques_len):
@@ -61,7 +61,7 @@ class QuesEncoder(nn.Module):
                ques_mask    shape [bs, num_hist, max_seq_len]
         """
         # for test only
-        if self.split == 'test':
+        if self.test_mode:
             # get only the last question
             last_idx = (ques_len > 0).sum()
             ques = ques[:, last_idx-1:last_idx]
@@ -109,12 +109,12 @@ class QuesEncoder(nn.Module):
 
 class HistEncoder(nn.Module):
 
-    def __init__(self, text_encoder, hidden_size, split='train'):
+    def __init__(self, text_encoder, hidden_size, test_mode=False):
         self.hidden_size = hidden_size
         super(HistEncoder, self).__init__()
         self.encoder = text_encoder
         self.hist_linear = nn.Linear(hidden_size * 2, hidden_size)
-        self.split=split
+        self.test_mode=test_mode
 
         if isinstance(text_encoder, TransformerEncoder):
             self.summary_linear = SummaryAttention(hidden_size)
@@ -133,7 +133,7 @@ class HistEncoder(nn.Module):
         # shape [bs * num_rounds]
         hist_len = hist_len.view(bs * num_rounds)
 
-        if self.split == 'test':
+        if self.test_mode:
             num_hist = 1
             round_mask = torch.ones(bs, num_hist, num_rounds, 1, device=hist.device)
             hist_mask = torch.ones(bs * num_hist, num_rounds, device=hist.device)

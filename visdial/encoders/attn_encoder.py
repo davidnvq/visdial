@@ -41,9 +41,9 @@ class MultiHeadAttention(nn.Module):
 	def project(self, x, x_mem, linear):
 		x_mem_size = x.size(0), self.memory_size, self.hidden_size
 		x = torch.cat([x_mem.unsqueeze(0).expand(*x_mem_size), x], dim=1)
-		x_proj = linear(x)
-		# x_proj = x.view(x.size(0), x.size(1), self.num_heads, self.d_h)
-		x_proj = x_proj.view(x_proj.size(0), x_proj.size(1), self.num_heads, self.d_h)
+		# x_proj = linear(x)
+		x_proj = x.view(x.size(0), x.size(1), self.num_heads, self.d_h)
+		# x_proj = x_proj.view(x_proj.size(0), x_proj.size(1), self.num_heads, self.d_h)
 		return x, x_proj
 
 

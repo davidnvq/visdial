@@ -55,29 +55,29 @@ def get_attn_encoder(config):
 		lstm = DynamicRNN(nn.LSTM(config['model']['embedding_size'],
 		                          config['model']['hidden_size'],
 		                          num_layers=2,
-		                          bidirectional=config['model']['bidirectional'],
+		                          bidirectional=True,
 		                          batch_first=True))
 		return lstm
 
 	encoder = Encoder(
 			text_encoder=TextEncoder(
 					text_embeddings,
-					HistEncoder(get_lstm(config), hidden_size=config['model']['hidden_size'], split=config['model']['split']),
-					QuesEncoder(get_lstm(config), hidden_size=config['model']['hidden_size'], split=config['model']['split']),
+					HistEncoder(get_lstm(config), hidden_size=config['model']['hidden_size'], test_mode=config['model']['test_mode']),
+					QuesEncoder(get_lstm(config), hidden_size=config['model']['hidden_size'], test_mode=config['model']['test_mode']),
 					),
 
 			img_encoder=ImageEncoder(
 					dropout=config['model']['dropout'],
 					hidden_size=config['model']['hidden_size'],
 					img_feat_size=config['model']['img_feature_size'],
-					split=config['model']['split']
+					test_mode=config['model']['test_mode']
 					),
 			attn_encoder=CrossAttentionEncoder(
 					hidden_size=config['model']['hidden_size'],
-					num_heads=config['model']['encoder_num_heads'],
-					share_attn=config['model']['share_attn'],
-					memory_size=config['model']['encoder_memory_size'],
-					num_cross_attns=config['model']['encoder_num_cross_attns']
+					num_heads=config['model']['num_cross_attn_heads'],
+					share_attn=config['model']['share_attn_weights'],
+					memory_size=config['model']['memory_size'],
+					num_cross_attns=config['model']['num_cross_attns']
 					),
 			hidden_size=config['model']['hidden_size']
 			)
@@ -155,16 +155,13 @@ def get_lf_misc_lstm_model(config):
 
 def get_model(config):
 	get_model_dict = {
-		'lf_gen_lstm'   : get_lf_gen_lstm_model,
-		'lf_disc_lstm'  : get_lf_disc_lstm_model,
-		'lf_misc_lstm'  : get_lf_misc_lstm_model,
-		'attn_gen_lstm' : get_attn_gen_lstm_model,
-		'attn_disc_lstm': get_attn_disc_lstm_model,
-		'attn_misc_lstm': get_attn_misc_lstm_model
+		'gen' : get_attn_gen_lstm_model,
+		'disc': get_attn_disc_lstm_model,
+		'misc': get_attn_misc_lstm_model
 		}
 
-	model = get_model_dict[config['config_name']](config)
-	glove_path = config['dataset']['glove']
+	model = get_model_dict[config['model']['decoder_type']](config)
+	glove_path = config['dataset']['glove_path']
 	glove_weights = torch.load(glove_path)
 	model.encoder.text_encoder.text_embeddings.tok_embedding.load_state_dict(glove_weights)
 	return model

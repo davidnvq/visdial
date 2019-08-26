@@ -45,7 +45,7 @@ class DiscriminativeDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.split = self.config['model']['split']
+        self.test_mode = self.config['model']['test_mode']
 
         self.word_embed = nn.Embedding(
             config['model']['vocab_size'],
@@ -145,7 +145,7 @@ class DiscriminativeDecoder(nn.Module):
         # shape: [BS, NR, NO]
         scores = scores.squeeze(-1)
 
-        if self.split == 'test':
+        if self.test_mode:
             scores = scores[:, batch['num_rounds'] - 1]
 
         return {'opt_scores': scores}
@@ -176,7 +176,7 @@ class GenerativeDecoder(nn.Module):
     def __init__(self, config):
         super(GenerativeDecoder, self).__init__()
         self.config = config
-        self.split = self.config['model']['split']
+        self.test_mode = self.config['model']['test_mode']
         self.word_embed = nn.Embedding(
             config['model']['vocab_size'],
             config['model']['embedding_size'],
@@ -241,7 +241,7 @@ class GenerativeDecoder(nn.Module):
             opts_in = batch["opts_in"]
             target_opts_out = batch["opts_out"]
 
-            if self.split == 'test':
+            if self.test_mode:
                 # shape: [BS, NH, NO, SEQ]
                 opts_in = opts_in[:, batch['num_rounds'] - 1]
                 # shape: [BS x NH x NO, SEQ]
