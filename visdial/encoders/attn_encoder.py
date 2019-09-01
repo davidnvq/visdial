@@ -18,32 +18,39 @@ class NormalSubLayer(nn.Module):
 
 class MultiHeadAttention(nn.Module):
 
-	def __init__(self, hidden_size, num_heads, memory_size=1, dropout=0.0):
+	def __init__(self, config):
 		super().__init__()
+		self.config = config
 
-		self.hidden_size = hidden_size
-		self.memory_size = memory_size
-		self.num_heads = num_heads
-		self.d_h = hidden_size // num_heads
-		self.dropout = nn.Dropout(p=dropout)
+		self.hidden_size = config['model']['hidden_size']
+		self.num_heads = config['model']['ca_num_cross_attn_heads']
+		self.memory_size = config['model']['ca_memory_size']
+		self.dropout = nn.Dropout(p=config['model']['dropout'])
 
-		self.x_proj_linear = nn.Linear(hidden_size, hidden_size, bias=False)
-		self.y_proj_linear = nn.Linear(hidden_size, hidden_size, bias=False)
-		# nn.init.kaiming_uniform_(self.x_proj_linear.weight)
-		# nn.init.kaiming_uniform_(self.y_proj_linear.weight)
+		self.d_h = self.hidden_size // self.num_heads
 
-		self.x_memory = nn.Parameter(nn.init.kaiming_uniform_(torch.empty(memory_size, hidden_size)))
-		self.y_memory = nn.Parameter(nn.init.kaiming_uniform_(torch.empty(memory_size, hidden_size)))
+		if self.config['model']['ca_has_proj_linear']:
+			self.x_proj_linear = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+			self.y_proj_linear = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+		else:
+			self.x_proj_linear = None
+			self.y_proj_linear = None
+
+		self.x_memory = nn.Parameter(nn.init.kaiming_uniform_(torch.empty(self.memory_size, self.hidden_size)))
+		self.y_memory = nn.Parameter(nn.init.kaiming_uniform_(torch.empty(self.memory_size, self.hidden_size)))
 
 		self.attn_X_guided_by_Y = None
 		self.attn_Y_guided_by_X = None
 
-	def project(self, x, x_mem, linear):
+	def project(self, x, x_mem, linear=None):
 		x_mem_size = x.size(0), self.memory_size, self.hidden_size
 		x = torch.cat([x_mem.unsqueeze(0).expand(*x_mem_size), x], dim=1)
-		# x_proj = linear(x)
-		x_proj = x.view(x.size(0), x.size(1), self.num_heads, self.d_h)
-		# x_proj = x_proj.view(x_proj.size(0), x_proj.size(1), self.num_heads, self.d_h)
+
+		if self.config['model']['ca_has_proj_linear']:
+			x_proj = linear(x)
+			x_proj = x_proj.view(x_proj.size(0), x_proj.size(1), self.num_heads, self.d_h)
+		else:
+			x_proj = x.view(x.size(0), x.size(1), self.num_heads, self.d_h)
 		return x, x_proj
 
 
@@ -98,41 +105,80 @@ class MultiHeadAttention(nn.Module):
 
 
 class CrossAttentionLayer(nn.Module):
-	def __init__(self, hidden_size, num_heads, memory_size=1, dropout=0.0):
+	def __init__(self, config):
 		super(CrossAttentionLayer, self).__init__()
-		self.attns = clones(MultiHeadAttention(hidden_size, num_heads, memory_size, dropout), 3)
-		self.norms = clones(NormalSubLayer(hidden_size, dropout), 3)
+		self.config = config
+		hidden_size = config['model']['hidden_size']
+		dropout = config['model']['dropout']
 
+		self.attns = clones(MultiHeadAttention(config), 3)
+		self.im_mlp = NormalSubLayer(hidden_size, dropout)
+		self.qe_mlp = NormalSubLayer(hidden_size, dropout)
+
+		if self.config['model']['ca_has_updated_hist']:
+			self.hi_mlp = NormalSubLayer(hidden_size, dropout)
+
+		if self.config['model']['ca_has_layer_norm']:
+			self.im_norm = nn.LayerNorm(hidden_size)
+			self.qe_norm = nn.LayerNorm(hidden_size)
+			if self.config['model']['ca_has_updated_hist']:
+				self.hi_norm = nn.LayerNorm(hidden_size)
 
 	def forward(self, triples):
 		"""
-		:param x:       [batch_size, M, hidden_size]
-		:param mask_x:  [batch_size, M]
-		:return:        [batch_size, M, hidden_size]
+		:param triples: (im, qe, hi, mask_i, mask_qe, mask_hi)
+		:return: (im, qe, hi, mask_i, mask_qe, mask_hi)
+		im [batch_size, M, hidden_size]
 		"""
-		x, y, z, mask_x, mask_y, mask_z = triples
-		x_in_y, y_in_x = self.attns[0](x, y, mask_x, mask_y)
-		x_in_z, z_in_x = self.attns[1](x, z, mask_x, mask_z)
-		y_in_z, z_in_y = self.attns[2](y, z, mask_y, mask_z)
+		im, qe, hi, mask_im, mask_qe, mask_hi = triples
+		im_in_qe, qe_in_im = self.attns[0](im, qe, mask_im, mask_qe)
+		im_in_hi, hi_in_im = self.attns[1](im, hi, mask_im, mask_hi)
+		qe_in_hi, hi_in_qe = self.attns[2](qe, hi, mask_qe, mask_hi)
 
-		x = self.norms[0](torch.cat([x, y_in_x, z_in_x], dim=-1))
-		z = self.norms[1](torch.cat([z, y_in_z, x_in_z], dim=-1))
-		y = self.norms[2](torch.cat([y, z_in_y, x_in_y], dim=-1))
-		return x, y, z, mask_x, mask_y, mask_z
+		a_im = self.im_mlp(torch.cat([im, qe_in_im, hi_in_im], dim=-1))
+		a_qe = self.qe_mlp(torch.cat([qe, hi_in_qe, im_in_qe], dim=-1))
+
+		# The best one doesn't need this
+		if self.config['model']['ca_has_updated_hist']:
+			a_hi = self.hi_mlp(torch.cat([hi, qe_in_hi, im_in_hi], dim=-1))
+
+		if self.config['model']['ca_has_residual']:
+			im = im + a_im
+			qe = qe + a_qe
+			if self.config['model']['ca_has_updated_hist']:
+				hi = hi + a_hi
+		else:
+			im = a_im
+			qe = a_qe
+			if self.config['model']['ca_has_updated_hist']:
+				hi = a_hi
+
+		if self.config['model']['ca_has_layer_norm']:
+			im = self.im_norm(im)
+			qe = self.qe_norm(qe)
+			if self.config['model']['ca_has_updated_hist']:
+				hi = self.hi_norm(hi)
+
+		return im, qe, hi, mask_im, mask_qe, mask_hi
 
 
 class CrossAttentionEncoder(nn.Module):
 
-	def __init__(self, hidden_size, num_heads, share_attn, memory_size=1, dropout=0.0, num_cross_attns=2, **kwargs):
+	def __init__(self, config):
+		"""
+		hidden_size, num_heads, share_attn, memory_size=1, dropout=0.0, num_cross_attns=2
+		:param config:
+		"""
 		super(CrossAttentionEncoder, self).__init__()
 
-		# share the same cross-attn layer
-		# then the number of params reduced by / num_cross_attns
-		# check very careful
-		if share_attn:
-			layers = [CrossAttentionLayer(hidden_size, num_heads, memory_size, dropout)] * num_cross_attns
+		self.config = config
+
+		num_cross_attns = self.config['model']['ca_num_cross_attns']
+
+		if self.config['model']['ca_has_shared_attns']:
+			layers = [CrossAttentionLayer(config)] * num_cross_attns
 		else:
-			layers = [CrossAttentionLayer(hidden_size, num_heads, memory_size, dropout) for i in range(num_cross_attns)]
+			layers = [CrossAttentionLayer(config) for _ in range(num_cross_attns)]
 
 		self.cross_attn_encoder = nn.Sequential(*layers)
 

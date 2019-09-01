@@ -26,7 +26,6 @@ class VisDialDataset(Dataset):
 		super().__init__()
 		self.config = config
 		self.split = split
-		self.is_legacy = config['dataset']['is_legacy']
 		self.tokenizer = self._get_tokenizer(config)
 		self.is_add_boundaries = self._get_is_add_boundaries(config)
 		self.is_return_options = self._get_is_return_options(config)
@@ -37,7 +36,7 @@ class VisDialDataset(Dataset):
 		self.image_ids = list(self.dialogs_reader.dialogs.keys())
 
 		if config['dataset']['overfit']:
-			self.image_ids = self.image_ids[:32]
+			self.image_ids = self.image_ids[:config['solver']['num_samples']]
 		if config['dataset']['finetune']:
 			self.image_ids = self.dense_ann_feat_reader._image_ids
 
@@ -87,11 +86,11 @@ class VisDialDataset(Dataset):
 
 	def _get_img_feat_reader(self, config, split):
 		path = config['dataset'][f'{split}_feat_img_path']
-		hdf_reader = ImageFeaturesHdfReader(path, self.is_legacy)
+		hdf_reader = ImageFeaturesHdfReader(path)
 		return hdf_reader
 
 	def _get_tokenizer(self, config):
-		if config['model']['tokenizer'] == 'bert':
+		if config['model']['txt_tokenizer'] == 'bert':
 			return BertTokenizer.from_pretrained("bert-base-uncased", do_lower_case=True)
 		else:
 			path = config['dataset']['train_json_word_count_path']
@@ -313,7 +312,7 @@ class VisDialDataset(Dataset):
 
 
 	def return_token_feats_to_item(self, visdial_instance):
-		if self.config['model']['tokenizer'] == 'nlp':
+		if self.config['model']['txt_tokenizer'] == 'nlp':
 			caption = visdial_instance["caption"]
 			dialog = visdial_instance["dialog"]
 
@@ -347,30 +346,29 @@ class VisDialDataset(Dataset):
 
 	def return_img_feat_to_item(self, image_id):
 		# Get image features for this image_id using hdf reader.
-		if self.is_legacy:
-			img_feat = self.img_feat_reader[image_id]
-			img_feat = torch.tensor(img_feat)
-			if self.config['dataset']["img_norm"]:
-				img_feat = normalize(img_feat, dim=0, p=2)
+		res = {}
+		out  = self.img_feat_reader[image_id]
+		res['img_feat'] = torch.tensor(out['features'])
 
-			return {'img_feat' : img_feat}
+		if self.config['model']['img_has_bboxes']:
+			res['num_boxes'] = torch.tensor(out['num_boxes'])
+			res['img_w'] = torch.tensor(out['image_w'])
+			res['img_h'] = torch.tensor(out['image_h'])
+			res['boxes'] = torch.tensor(out['boxes'])
 
-		else:
-			img_feat, img_w, img_h, boxes  = self.img_feat_reader[image_id]
-			img_feat = torch.tensor(img_feat)
-			img_w = torch.tensor(img_w)
-			img_h = torch.tensor(img_h)
-			boxes = torch.tensor(boxes)
+		if self.config['model']['img_has_attributes']:
+			attrs = []
+			for box_attr in out['top_attr_names']:
+				attrs.append(self.tokenizer.convert_tokens_to_ids(box_attr))
 
-			# Normalize image features at zero-th dimension
-			# (since there's no batch dimension).
-			if self.config['dataset']["img_norm"]:
-				img_feat = normalize(img_feat, dim=0, p=2)
+			res['attrs'] = torch.tensor(attrs).long()
+			res['attr_scores'] = torch.tensor(out['top_attrs_scores'])
 
-			return {'img_feat': img_feat,
-			        'img_w' : img_w,
-			        'img_h' : img_h,
-			        'boxes' : boxes}
+		if self.config['model']['img_has_classes']:
+			cls_ids = self.tokenizer.convert_tokens_to_ids(out['cls_names'])
+			res['classes'] = torch.tensor(cls_ids).long()
+		return res
+
 
 	def monitor_output(self, image_id):
 		visdial_instance = self.dialogs_reader[image_id]

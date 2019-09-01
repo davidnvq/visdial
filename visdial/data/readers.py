@@ -49,9 +49,9 @@ class DialogsReader(object):
 	"""
 
 	def __init__(self, config, split='train'):
-		if config['model']['tokenizer'] == 'nlp':
+		if config['model']['txt_tokenizer'] == 'nlp':
 			self.tokenize = word_tokenize
-		elif config['model']['tokenizer'] == 'bert':
+		elif config['model']['txt_tokenizer'] == 'bert':
 			self.tokenize = BertTokenizer.from_pretrained('bert-base-uncased').tokenize
 
 		self.config = config
@@ -104,20 +104,20 @@ class DialogsReader(object):
 				self.dialogs[dialog_for_image["image_id"]] = dialog_for_image["dialog"]
 
 			print(f"[{self._split}] Tokenizing questions...")
-			for i in tqdm(range(len(self.questions))):
+			for i in range(len(self.questions)):
 				# print('len(self.questions[i])', len(self.questions[i]))
 				self.questions[i] = self.questions[i] + "?" if len(self.questions[i]) > 0 else self.questions[i]
 				self.questions[i] = self.do_tokenize(self.questions[i])
 
 			print(f"[{self._split}] Tokenizing answers...")
-			for i in tqdm(range(len(self.answers))):
+			for i in range(len(self.answers)):
 				self.answers[i] = self.do_tokenize(self.answers[i])
 
 			print(f"[{self._split}] Tokenizing captions...")
-			for image_id, caption in tqdm(self.captions.items()):
+			for image_id, caption in self.captions.items():
 				self.captions[image_id] = self.do_tokenize(caption)
 
-		if config['model']['tokenizer'] == 'bert':
+		if config['model']['txt_tokenizer'] == 'bert':
 			path_feat_questions = config['dataset'][split]['path_feat_questions']
 			path_feat_history = config['dataset'][split]['path_feat_history']
 			self.question_reader = QuestionFeatureReader(path_feat_questions)
@@ -143,7 +143,7 @@ class DialogsReader(object):
 			"dialog"    : dialog_for_image,
 			}
 
-		if self.config['model']['tokenizer'] == 'bert':
+		if self.config['model']['txt_tokenizer'] == 'bert':
 			# Replace question and answer indices with actual word tokens.
 			dialog_for_image = self.replace_ids_by_tokens(
 					dialog_for_image,
@@ -337,7 +337,7 @@ def test_question_feature_reader():
 	print('question_mask1', question_mask1)
 
 
-class ImageFeaturesHdfReader(object):
+class ImageFeaturesHdfReader:
 	"""
 	A reader for HDF files containing pre-extracted image features. A typical
 	HDF file is expected to have a column named "image_id", and another column
@@ -362,33 +362,78 @@ class ImageFeaturesHdfReader(object):
 		Whether to load the whole HDF file in memory. Beware, these files are
 		sometimes tens of GBs in size. Set this to true if you have sufficient
 		RAM - trade-off between speed and memory.
+
+	['boxes',
+	 'cls_indices',
+	 'features',
+	 'image_h',
+	 'image_id',
+	 'image_w',
+	 'num_boxes',
+	 'st1_boxes',
+	 'top_attrs',
+	 'top_attrs_scores']
 	"""
 
-	def __init__(self, features_hdfpath, is_legacy=False):
-		self.features_hdfpath = features_hdfpath
-		self.is_legacy = is_legacy
+	def __init__(self,
+				 hdf_path,
+				 genome_path='/media/local_workspace/quang/datasets/visdial/genome/1600-400-20'):
 
-		with h5py.File(self.features_hdfpath, "r") as features_hdf:
-			self._split = features_hdf.attrs["split"]
-			self.image_id_list = list(features_hdf["image_id"])
+		self.hdf_path = hdf_path
+		self.genome_path = genome_path
+
+		with h5py.File(self.hdf_path, "r") as hdf:
+			self._split = hdf.attrs["split"]
+			self.image_id_list = list(hdf["image_id"])
+			self.dataset_names = list(hdf.keys())
+
+		# Load classes
+		self.CLASSES = ['__background__']
+		with open(os.path.join(genome_path, 'objects_vocab.txt')) as f:
+			for object in f.readlines():
+				self.CLASSES.append(object.split(',')[0].lower().strip())
+
+		# Load attributes
+		self.ATTRIBUTES = ['__no_attribute__']
+		with open(os.path.join(genome_path, 'attributes_vocab.txt')) as f:
+			for att in f.readlines():
+				self.ATTRIBUTES.append(att.split(',')[0].lower().strip())
 
 	def __len__(self):
 		return len(self.image_id_list)
 
 	def __getitem__(self, image_id: int):
 		index = self.image_id_list.index(image_id)
-		if self.is_legacy:
-			with h5py.File(self.features_hdfpath, "r") as features_hdf:
-				image_id_features = features_hdf["features"][index]
-			return image_id_features
 
-		with h5py.File(self.features_hdfpath, "r") as features_hdf:
-			image_id_features = features_hdf["features"][index]
-			img_w = features_hdf["image_w"][index]
-			img_h = features_hdf["image_h"][index]
-			boxes = features_hdf["boxes"][index]
+		output = {}
 
-		return image_id_features, img_w, img_h, boxes
+		with h5py.File(self.hdf_path, 'r') as hdf:
+			for name in self.dataset_names:
+				if name not in ['st1_boxes']:
+					output[name] = hdf[name][index]
+
+		if 'cls_indices' in self.dataset_names:
+			output['cls_names'] = self.get_cls_name(output['cls_indices'])
+		if 'top_attrs' in self.dataset_names:
+			output['top_attr_names'] = self.get_attr_names(output['top_attrs'])
+		return output
+
+
+	def get_cls_name(self, cls_indices):
+		cls_names = []
+		for cls_idx in cls_indices:
+			cls_names.append(self.CLASSES[cls_idx])
+		return cls_names
+
+	def get_attr_names(self, top_attrs):
+		top_word_attrs = []
+		for row_attrs in top_attrs:
+			box_word_attrs = []
+			for attr_idx in row_attrs:
+				box_word_attrs.append(self.ATTRIBUTES[attr_idx])
+			top_word_attrs.append(box_word_attrs)
+		return top_word_attrs
+
 
 	def keys(self) -> List[int]:
 		return self.image_id_list
@@ -396,3 +441,74 @@ class ImageFeaturesHdfReader(object):
 	@property
 	def split(self):
 		return self._split
+
+
+def test_ImageReader():
+    import random
+
+    def draw_img(img_path, out):
+        import cv2
+        import matplotlib.pyplot as plt
+
+        # set display defaults
+        plt.rcParams['figure.figsize'] = (20, 15)
+        # don't interpolate: show square pixels
+        plt.rcParams['image.interpolation'] = 'nearest'
+        # use grayscale output rather than a (potentially misleading) color heatmap
+        plt.rcParams['image.cmap'] = 'gray'
+
+        # Select boxes from st2 boxes
+        boxes = out['boxes']
+        cls_names = out['cls_names']
+        top_attr_names = out['top_attr_names']
+        top_attrs_scores = out['top_attrs_scores']
+
+        im = cv2.imread(img_path)
+        im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+
+        plt.imshow(im)
+        print("Keep_box_indices", len(boxes))
+
+        for i in range(len(boxes)):
+            bbox = boxes[i]
+            if bbox[0] == 0:
+                bbox[0] = 1
+            if bbox[1] == 0:
+                bbox[1] = 1
+            cls_name = cls_names[i]
+
+            row_attr_names = top_attr_names[i]
+#             if len(row_attr_names) > 2:
+#                 print(row_attr_names)
+
+            text = " ".join(row_attr_names) + " " + cls_name
+            text = text.replace('__no_attribute__', '').replace('  ', '')
+
+            plt.gca().add_patch(
+                plt.Rectangle((bbox[0], bbox[1]),
+                              bbox[2] - bbox[0],
+                              bbox[3] - bbox[1], fill=False,
+                              edgecolor='red', linewidth=2, alpha=0.5)
+            )
+            plt.gca().text(bbox[0], bbox[1] - 2,
+                           '%s' % (text),
+                           bbox=dict(facecolor='blue', alpha=0.5),
+                           fontsize=10, color='white')
+
+
+    def get_img_path(img_id):
+        pattern = '/media/local_workspace/quang/datasets/visdial/raw_images' \
+                  '/VisualDialog_val2018/VisualDialog_val2018_{:012d}.jpg'
+        return pattern.format(img_id)
+
+    DATA_PATH = '/media/local_workspace/quang/datasets/visdial'
+    hdf_path = DATA_PATH + '/bottom-up-attention/val2018_resnet101_faster_rcnn_genome__num_boxes_(10, 100).h5'
+    hdf = ImageFeaturesHdfReader(hdf_path)
+
+    img_id = hdf.image_id_list[random.randint(0, 1000)]
+
+    out = hdf[img_id]
+
+    img_path = get_img_path(img_id)
+
+    draw_img(img_path, out)

@@ -1,1 +1,0 @@
-from visdial.decoders.decoder import Decoder

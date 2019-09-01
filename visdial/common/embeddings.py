@@ -22,16 +22,19 @@ class PositionalEmbedding(nn.Module):
 
     def forward(self, x):
         """
-        :param x: shape [bs, seq_len] expect!
+        :param x: shape [bs, seq_len,...] expect!
         :return:  shape [bs, seq_len, hidden_size]
         """
         # shape [BS, seq_len]
-        y = x.view(-1, x.size(-1)) if len(x.size()) > 2 else x
+
+        bs, seq_len = x.size(0), x.size(1)
+
+        # y = x.view(-1, x.size(-1)) if len(x.size()) > 2 else x
         # shape [1, seq_len, embedding_size]
-        out = self.pe[:, :y.size(1)]
+        # out = self.pe[:, :y.size(1)]
+        out = self.pe[:, :seq_len]
 
         # shape [BS, seq_len, embedding_size]
-        out = out.repeat(y.size(0), 1, 1)
+        out = out.repeat(bs, 1, 1)
 
-        # shape [*x.size(), embedding_size]
-        return out.view(*x.size(), -1)
+        return out

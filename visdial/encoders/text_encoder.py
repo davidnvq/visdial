@@ -1,22 +1,21 @@
 import torch
 import torch.nn as nn
 
-from visdial.common.embeddings import TextEmbeddings
+from visdial.common import PositionalEmbedding
 from visdial.common.dynamic_rnn import DynamicRNN
-from visdial.common.summary import SummaryAttention
-from visdial.common.transformer.text_encoder import TransformerEncoder
 
 
 class TextEncoder(nn.Module):
-    def __init__(self, text_embeddings, hist_encoder, ques_encoder):
+    def __init__(self, config, hist_encoder, ques_encoder):
         super(TextEncoder, self).__init__()
-        self.text_embeddings = text_embeddings
+        self.text_embedding = nn.Embedding(config['model']['txt_vocab_size'],
+                                           config['model']['txt_embedding_size'],
+                                           padding_idx=0)
+
         self.hist_encoder = hist_encoder
         self.ques_encoder = ques_encoder
 
-
     def forward(self, batch):
-
         # ques_tokens: shape [bs, num_hist, max_seq_len]
         # hist_tokens: shape [bs, num_hist, num_rounds, max_seq_len]
         ques_tokens = batch['ques_tokens']
@@ -29,28 +28,41 @@ class TextEncoder(nn.Module):
 
         # ques: shape [bs, num_hist, max_seq_len, embedding_size(or hidden_size)]
         # hist: shape [bs, num_hist, num_rounds, max_seq_len, embedding_size(or hidden_size)]
-        ques = self.text_embeddings(ques_tokens)
-        hist = self.text_embeddings(hist_tokens)
+        ques = self.text_embedding(ques_tokens)
+        hist = self.text_embedding(hist_tokens)
 
         # ques: shape [bs * num_hist, max_seq_len, hidden_size]
         # hist: shape [bs * num_hist, num_rounds, hidden_size]
         # ques_mask: shape [bs * num_hist, max_seq_len]
         # hist_mask: shape [bs * num_hist, num_rounds]
-        ques, ques_mask = self.ques_encoder(ques, batch['ques_len'])
-        hist, hist_mask = self.hist_encoder(hist, batch['hist_len'])
+        ques, ques_mask = self.ques_encoder(ques, ques_len)
+        hist, hist_mask = self.hist_encoder(hist, hist_len)
 
         return hist, ques, hist_mask, ques_mask
 
 
 class QuesEncoder(nn.Module):
 
-    def __init__(self, text_encoder, hidden_size, test_mode=False):
+    def __init__(self, config):
         super(QuesEncoder, self).__init__()
-        self.hidden_size = hidden_size
-        self.encoder = text_encoder
-        self.ques_linear = nn.Linear(hidden_size*2, hidden_size)
-        self.test_mode = test_mode
 
+        self.ques_linear = nn.Linear(config['model']['hidden_size'] * 2,
+                                     config['model']['hidden_size'])
+
+        self.ques_lstm = DynamicRNN(nn.LSTM(config['model']['txt_embedding_size'],
+                                            config['model']['hidden_size'],
+                                            num_layers=2,
+                                            bidirectional=config['model']['txt_bidirectional'],
+                                            batch_first=True))
+
+        if config['model']['txt_has_layer_norm']:
+            self.layer_norm = nn.LayerNorm(config['model']['hidden_size'])
+
+        if config['model']['txt_has_pos_embedding']:
+            self.pos_embedding = PositionalEmbedding(config['model']['hidden_size'],
+                                                     config['dataset']['max_seq_len'])
+
+        self.config = config
 
     def forward(self, ques, ques_len):
         """
@@ -61,11 +73,11 @@ class QuesEncoder(nn.Module):
                ques_mask    shape [bs, num_hist, max_seq_len]
         """
         # for test only
-        if self.test_mode:
+        if self.config['model']['test_mode']:
             # get only the last question
             last_idx = (ques_len > 0).sum()
-            ques = ques[:, last_idx-1:last_idx]
-            ques_len = ques_len[:, last_idx-1:last_idx]
+            ques = ques[:, last_idx - 1:last_idx]
+            ques_len = ques_len[:, last_idx - 1:last_idx]
 
         bs, num_hist, max_seq_len, embedding_size = ques.size()
 
@@ -79,19 +91,11 @@ class QuesEncoder(nn.Module):
         ques_mask = torch.arange(max_seq_len, device=ques.device).repeat(bs * num_hist, 1)
         ques_mask = ques_mask < ques_len.unsqueeze(-1)
 
-        if isinstance(self.encoder, TransformerEncoder):
-            # ques:         shape [bs * num_hist, max_seq_len, hidden_size]
-            # ques_mask:    shape [bs * num_hist, max_seq_len,]
-            # shape [bs * num_hist, max_seq_len, hidden_size]
-
-            ques = self.encoder(ques, ques_mask)
-            return ques, ques_mask.long()
-
-        if isinstance(self.encoder, DynamicRNN):
+        if isinstance(self.ques_lstm, DynamicRNN):
             # LSTM
-            if self.encoder.bidirectional == False:
+            if not self.ques_lstm.bidirectional:
                 # shape: ques [bs * num_hist, max_seq_len, hidden_size]
-                ques, (_, _) = self.encoder(ques, ques_len)
+                ques, (_, _) = self.ques_lstm(ques, ques_len)
 
                 # shape: ques [bs * num_hist, max_seq_len, hidden_size]
                 # shape: ques [bs * num_hist, max_seq_len,]
@@ -100,25 +104,42 @@ class QuesEncoder(nn.Module):
             # BiLSTM
             else:
                 # [BS x NH, SEQ, HS x 2]
-                ques, (_, _) = self.encoder(ques, ques_len)
+                ques, (_, _) = self.ques_lstm(ques, ques_len)
 
                 # [BS x NH, SEQ, HS]
                 ques = self.ques_linear(ques)
+                if self.config['model']['txt_has_pos_embedding']:
+                    ques += ques + self.pos_embedding(ques)
+
+                if self.config['model']['txt_has_layer_norm']:
+                    ques = self.layer_norm(ques)
+
                 return ques, ques_mask.long()
 
 
 class HistEncoder(nn.Module):
 
-    def __init__(self, text_encoder, hidden_size, test_mode=False):
-        self.hidden_size = hidden_size
+    def __init__(self, config):
         super(HistEncoder, self).__init__()
-        self.encoder = text_encoder
-        self.hist_linear = nn.Linear(hidden_size * 2, hidden_size)
-        self.test_mode=test_mode
 
-        if isinstance(text_encoder, TransformerEncoder):
-            self.summary_linear = SummaryAttention(hidden_size)
+        self.hist_linear = nn.Linear(config['model']['hidden_size'] * 2,
+                                     config['model']['hidden_size'])
 
+        self.hist_lstm = DynamicRNN(nn.LSTM(config['model']['txt_embedding_size'],
+                                            config['model']['hidden_size'],
+                                            num_layers=2,
+                                            bidirectional=config['model']['txt_bidirectional'],
+                                            batch_first=True))
+
+        if config['model']['txt_has_layer_norm']:
+            self.layer_norm = nn.LayerNorm(config['model']['hidden_size'])
+
+        if config['model']['txt_has_pos_embedding']:
+            self.pos_embedding = PositionalEmbedding(config['model']['hidden_size'],
+                                                     max_len=10)
+
+        self.config = config
+        self.hidden_size = self.config['model']['hidden_size']
 
     def forward(self, hist, hist_len):
         bs, num_rounds, max_seq_len, embedding_size = hist.size()
@@ -133,7 +154,7 @@ class HistEncoder(nn.Module):
         # shape [bs * num_rounds]
         hist_len = hist_len.view(bs * num_rounds)
 
-        if self.test_mode:
+        if self.config['model']['test_mode']:
             num_hist = 1
             round_mask = torch.ones(bs, num_hist, num_rounds, 1, device=hist.device)
             hist_mask = torch.ones(bs * num_hist, num_rounds, device=hist.device)
@@ -158,12 +179,12 @@ class HistEncoder(nn.Module):
 
             hist_mask = MASK[None, :, :].repeat(bs, 1, 1).view(bs * num_hist, num_rounds)
 
-        if isinstance(self.encoder, DynamicRNN):
+        if isinstance(self.hist_lstm, DynamicRNN):
 
-            if self.encoder.bidirectional == False: # LSTM
+            if not self.hist_lstm.bidirectional:  # LSTM
                 # shape: [num_layers, BS, HS] if Not bidirectional
                 # shape: hn = [num_layers, bs * num_rounds, hidden_size]
-                y, (hn, cn) = self.encoder(hist, hist_len)
+                y, (hn, cn) = self.hist_lstm(hist, hist_len)
 
                 # shape: [bs * num_rounds, hidden_size]
                 hist = hn[-1]
@@ -171,10 +192,10 @@ class HistEncoder(nn.Module):
                 # shape: [bs, num_rounds, hidden_size]
                 hist = hist.view(bs, num_rounds, self.hidden_size)
 
-            else: # BiLSTM
+            else:  # BiLSTM
 
                 # hn [num_layers x 2 (bidirectional), BS x NR, HS]
-                y, (hn, cn) = self.encoder(hist, hist_len)
+                y, (hn, cn) = self.hist_lstm(hist, hist_len)
 
                 # ReDAN use y and softmax for each words to filtering the irrelevant words
                 # hist = attn * y (where attn = softmax(W1 * tanh (W2 * y))
@@ -190,6 +211,12 @@ class HistEncoder(nn.Module):
                 # shape [BS, NR, HS]
                 hist = hist.view(bs, num_rounds, self.hidden_size)
 
+                if self.config['model']['txt_has_pos_embedding']:
+                    hist = hist + self.pos_embedding(hist)
+
+                if self.config['model']['txt_has_layer_norm']:
+                    hist = self.layer_norm(hist)
+
             # shape: [bs, num_hist, num_rounds, hidden_size]
             hist = hist[:, None, :, :].repeat(1, num_hist, 1, 1)
 
@@ -199,7 +226,6 @@ class HistEncoder(nn.Module):
             # shape: [bs * num_hist, num_rounds, hidden_size]
             hist = hist.view(bs * num_hist, num_rounds, self.hidden_size)
 
-
-        return (hist, # shape: [bs * num_hist, num_rounds, hidden_size]
-                hist_mask.long(), # shape [bs * num_hist, num_rounds]
+        return (hist,  # shape: [bs * num_hist, num_rounds, hidden_size]
+                hist_mask.long(),  # shape [bs * num_hist, num_rounds]
                 )

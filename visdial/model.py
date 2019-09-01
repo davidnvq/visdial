@@ -1,7 +1,5 @@
 import torch
 from torch import nn
-from visdial.common.dynamic_rnn import DynamicRNN
-from visdial.common.embeddings import TextEmbeddings
 from visdial.encoders.encoder import LateFusionEncoder
 from visdial.decoders.decoder import DiscriminativeDecoder, GenerativeDecoder, MiscDecoder
 from visdial.encoders import ImageEncoder, TextEncoder, HistEncoder, QuesEncoder, CrossAttentionEncoder, Encoder
@@ -44,50 +42,22 @@ class VisdialModel(nn.Module):
 
 
 def get_attn_encoder(config):
-	text_embeddings = TextEmbeddings(
-			vocab_size=config['model']['vocab_size'],
-			embedding_size=config['model']['embedding_size'],
-			hidden_size=config['model']['hidden_size'],
-			has_position=config['model']['embedding_has_position'],
-			has_hidden_layer=config['model']['embedding_has_hidden_layer'])
-
-	def get_lstm(config):
-		lstm = DynamicRNN(nn.LSTM(config['model']['embedding_size'],
-		                          config['model']['hidden_size'],
-		                          num_layers=2,
-		                          bidirectional=True,
-		                          batch_first=True))
-		return lstm
 
 	encoder = Encoder(
-			text_encoder=TextEncoder(
-					text_embeddings,
-					HistEncoder(get_lstm(config), hidden_size=config['model']['hidden_size'], test_mode=config['model']['test_mode']),
-					QuesEncoder(get_lstm(config), hidden_size=config['model']['hidden_size'], test_mode=config['model']['test_mode']),
-					),
-
-			img_encoder=ImageEncoder(
-					dropout=config['model']['dropout'],
-					hidden_size=config['model']['hidden_size'],
-					img_feat_size=config['model']['img_feature_size'],
-					test_mode=config['model']['test_mode']
-					),
-			attn_encoder=CrossAttentionEncoder(
-					hidden_size=config['model']['hidden_size'],
-					num_heads=config['model']['num_cross_attn_heads'],
-					share_attn=config['model']['share_attn_weights'],
-					memory_size=config['model']['memory_size'],
-					num_cross_attns=config['model']['num_cross_attns']
-					),
-			hidden_size=config['model']['hidden_size']
+			config=config,
+			text_encoder=TextEncoder(config, HistEncoder(config), QuesEncoder(config)),
+			img_encoder=ImageEncoder(config),
+			attn_encoder=CrossAttentionEncoder(config),
 			)
 	return encoder
 
 
 def get_attn_disc_lstm_model(config):
 	encoder = get_attn_encoder(config)
+	encoder.img_encoder.text_embedding = encoder.text_encoder.text_embedding
+
 	disc_decoder = DiscriminativeDecoder(config)
-	disc_decoder.word_embed = encoder.text_encoder.text_embeddings.tok_embedding
+	disc_decoder.text_embedding = encoder.text_encoder.text_embedding
 
 	gen_decoder = None
 	decoder = MiscDecoder(disc_decoder, gen_decoder)
@@ -98,10 +68,11 @@ def get_attn_disc_lstm_model(config):
 
 def get_attn_gen_lstm_model(config):
 	encoder = get_attn_encoder(config)
+	encoder.img_encoder.text_embedding = encoder.text_encoder.text_embedding
 
 	disc_decoder = None
 	gen_decoder = GenerativeDecoder(config)
-	gen_decoder.word_embed = encoder.text_encoder.text_embeddings.tok_embedding
+	gen_decoder.text_embedding = encoder.text_encoder.text_embedding
 
 	decoder = MiscDecoder(disc_decoder, gen_decoder)
 
@@ -110,47 +81,17 @@ def get_attn_gen_lstm_model(config):
 
 def get_attn_misc_lstm_model(config):
 	encoder = get_attn_encoder(config)
+	encoder.img_encoder.text_embedding = encoder.text_encoder.text_embedding
+
 	disc_decoder = DiscriminativeDecoder(config)
-	disc_decoder.word_embed = encoder.text_encoder.text_embeddings.tok_embedding
+	disc_decoder.text_embedding = encoder.text_encoder.text_embedding
 
 	gen_decoder = GenerativeDecoder(config)
-	gen_decoder.word_embed = encoder.text_encoder.text_embeddings.tok_embedding
+	gen_decoder.text_embedding = encoder.text_encoder.text_embedding
 
 	decoder = MiscDecoder(disc_decoder, gen_decoder)
 
 	return VisdialModel(encoder, decoder)
-
-
-def get_lf_disc_lstm_model(config):
-	encoder = LateFusionEncoder(config)
-	decoder = DiscriminativeDecoder(config)
-	decoder.word_embed = encoder.word_embed
-
-	model = VisdialModel(encoder=encoder, decoder=decoder)
-	return model
-
-
-def get_lf_gen_lstm_model(config):
-	encoder = LateFusionEncoder(config)
-	decoder = GenerativeDecoder(config)
-	decoder.word_embed = encoder.word_embed
-
-	model = VisdialModel(encoder=encoder, decoder=decoder)
-	return model
-
-
-def get_lf_misc_lstm_model(config):
-	encoder = LateFusionEncoder(config)
-
-	disc_decoder = DiscriminativeDecoder(config)
-	disc_decoder.word_embed = encoder.word_embed
-
-	gen_decoder = GenerativeDecoder(config)
-	gen_decoder.word_embed = gen_decoder.word_embed
-
-	decoder = MiscDecoder(disc_decoder=disc_decoder, gen_decoder=gen_decoder)
-	model = VisdialModel(encoder=encoder, decoder=decoder)
-	return model
 
 
 def get_model(config):
@@ -163,5 +104,5 @@ def get_model(config):
 	model = get_model_dict[config['model']['decoder_type']](config)
 	glove_path = config['dataset']['glove_path']
 	glove_weights = torch.load(glove_path)
-	model.encoder.text_encoder.text_embeddings.tok_embedding.load_state_dict(glove_weights)
+	model.encoder.text_encoder.text_embedding.load_state_dict(glove_weights)
 	return model
