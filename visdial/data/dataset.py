@@ -86,7 +86,11 @@ class VisDialDataset(Dataset):
 
 	def _get_img_feat_reader(self, config, split):
 		path = config['dataset'][f'{split}_feat_img_path']
-		hdf_reader = ImageFeaturesHdfReader(path)
+		genome_path = config['dataset'].get('genome_path', None)
+		if genome_path is None:
+			hdf_reader = ImageFeaturesHdfReader(path)
+		else:
+			hdf_reader = ImageFeaturesHdfReader(path, genome_path=genome_path)
 		return hdf_reader
 
 	def _get_tokenizer(self, config):

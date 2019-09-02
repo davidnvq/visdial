@@ -1,11 +1,11 @@
 callbacks:
-    log_dir: /home/quang/workspace/log/tensorboard/overfit/v001_abc_LP_lkf_Dlegacy
+    log_dir: /home/quang/workspace/log/tensorboard/overfit/v004_aBC_LP_Lkf_D36
     online: false
     path_pretrained_ckpt: null
     resume: false
-    save_dir: /media/local_workspace/quang/checkpoints/visdial/CVPR/overfit/v001_abc_LP_lkf_Dlegacy
+    save_dir: /media/local_workspace/quang/checkpoints/visdial/CVPR/overfit/v004_aBC_LP_Lkf_D36
     validate: true
-config_name: overfit/v001_abc_LP_lkf_Dlegacy
+config_name: overfit/v004_aBC_LP_Lkf_D36
 dataset:
     concat_hist: false
     finetune: false
@@ -16,10 +16,12 @@ dataset:
     max_seq_len: 20
     num_boxes: fixed
     overfit: false
-    train_feat_img_path: /media/local_workspace/quang/datasets/visdial/legacy/features_faster_rcnn_x101_val.h5
+    train_feat_img_path: /media/local_workspace/quang/datasets/visdial/bottom-up-attention/val2018_resnet101_faster_rcnn_genome__num_boxes_(36,
+        36).h5
     train_json_dialog_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_val.json
     train_json_word_count_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_word_counts_train.json
-    val_feat_img_path: /media/local_workspace/quang/datasets/visdial/legacy/features_faster_rcnn_x101_val.h5
+    val_feat_img_path: /media/local_workspace/quang/datasets/visdial/bottom-up-attention/val2018_resnet101_faster_rcnn_genome__num_boxes_(36,
+        36).h5
     val_json_dense_dialog_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_val_dense_annotations.json
     val_json_dialog_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_val.json
     vocab_min_count: 5
@@ -38,8 +40,8 @@ model:
     hidden_size: 512
     img_feat_size: 2048
     img_has_attributes: false
-    img_has_bboxes: false
-    img_has_classes: false
+    img_has_bboxes: true
+    img_has_classes: true
     img_num_attns: null
     test_mode: false
     txt_bidirectional: true
@@ -50,7 +52,7 @@ model:
     txt_tokenizer: nlp
     txt_vocab_size: 11322
 optional arguments:
-    config_name: overfit/v001_abc_LP_lkf_Dlegacy
+    config_name: overfit/v004_aBC_LP_Lkf_D36
     help: null
     seed: 0
 positional arguments: {}
