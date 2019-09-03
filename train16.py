@@ -31,9 +31,11 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO,
 
 # Set comet
 experiment = get_comet_experiment(config)
+device = torch.device('cuda')
 
 # For reproducibility
 seed = config['seed']
+
 random.seed(seed)
 np.random.seed(seed)
 torch.manual_seed(seed)
@@ -43,34 +45,23 @@ torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
 os.environ['PYTHONHASHSEED'] = str(seed)
 
-# datasets
-logging.info(f"CUDA number: {torch.cuda.device_count()}")
 
-"""DATASET INIT"""
-logging.info("Loading train dataset...")
-print("Loading train dataset...")
-train_dataset = VisDialDataset(config, split='train')
+# DATASET INIT
+logging.info("Loading train and validation dataset...")
+trainset = VisDialDataset(config, split='train')
+train_dl = DataLoader(trainset,
+                      batch_size=config['solver']['batch_size'] * torch.cuda.device_count(),
+                      num_workers=config['solver']['cpu_workers'],
+                      shuffle=True, pin_memory=True)
+validset = VisDialDataset(config, split='val')
+valid_dl = DataLoader(validset,
+                      batch_size=2 * torch.cuda.device_count(),
+                      num_workers=config['solver']['cpu_workers'], pin_memory=True)
 
-train_dataloader = DataLoader(train_dataset,
-                              batch_size=config['solver']['batch_size'] * torch.cuda.device_count(),
-                              num_workers=config['solver']['cpu_workers'],
-                              shuffle=True)
 
-logging.info("Loading val dataset...")
-print("Loading val dataset...")
-val_dataset = VisDialDataset(config, split='val')
-
-val_dataloader = DataLoader(val_dataset,
-                            batch_size=2 * torch.cuda.device_count(),
-                            num_workers=config['solver']['cpu_workers'])
-
-"""MODEL INIT"""
+# MODEL
 logging.info("Init model...")
-print("Init model...")
-device = torch.device('cuda')
 model = get_model(config)
-logging.info("Move model to GPU...")
-print("Move model to GPU...")
 model = model.to(device)
 
 """LOSS FUNCTION"""
@@ -80,27 +71,13 @@ disc_criterion = VisdialLoss(LS_epsilon=config['solver']['ls_epsilon'], return_m
 gen_criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 """OPTIMIZER"""
-# optimizer = optim.Adam(model.parameters(), lr=config['solver']['lr'])
-# scheduler = MultiStepLR(optimizer, milestones=config['solver']['lr_steps'], gamma=config['solver']['lr_gama'])
-
 parameters = get_weight_decay_params(model, weight_decay=config['solver']['weight_decay'])
 optimizer = Adam(parameters,
                  betas=config['solver']['adam_betas'],
                  eps=config['solver']['adam_eps'],
                  weight_decay=config['solver']['weight_decay'])
 
-lr_scheduler = LRScheduler(optimizer,
-                           batch_size=config['solver']['batch_size'],
-                           num_samples=config['solver']['num_samples'],
-                           num_epochs=config['solver']['num_epochs'],
-                           min_lr=config['solver']['min_lr'],
-                           init_lr=config['solver']['init_lr'],
-                           warmup_factor=config['solver']['warmup_factor'],
-                           warmup_epochs=config['solver']['warmup_epochs'],
-                           scheduler_type=config['solver']['scheduler_type'],
-                           milestone_steps=config['solver']['milestone_steps'],
-                           linear_gama=config['solver']['linear_gama']
-                           )
+lr_scheduler = LRScheduler(optimizer, **config['solver'])
 
 # =============================================================================
 #   SETUP BEFORE TRAINING LOOP
@@ -124,8 +101,8 @@ if torch.cuda.device_count() > 1:
 #   TRAINING LOOP
 # =============================================================================
 
-iterations = len(train_dataset) // (config['solver']['batch_size'] * torch.cuda.device_count()) + 1
-num_examples = torch.tensor(len(train_dataset), dtype=torch.float)
+iterations = len(trainset) // (config['solver']['batch_size'] * torch.cuda.device_count()) + 1
+num_examples = torch.tensor(len(trainset), dtype=torch.float)
 global_iteration_step = start_epoch * iterations
 
 for epoch in range(start_epoch, config['solver']['num_epochs']):
@@ -134,7 +111,7 @@ for epoch in range(start_epoch, config['solver']['num_epochs']):
 
     with tqdm(total=iterations) as pbar:
         epoch_loss = torch.tensor(0.0)
-        for i, batch in enumerate(train_dataloader):
+        for i, batch in enumerate(train_dl):
             batch = move_to_cuda(batch, device)
 
             # zero out gradients
@@ -214,7 +191,7 @@ for epoch in range(start_epoch, config['solver']['num_epochs']):
 
         logging.info(f"\nValidation after epoch {epoch}:")
 
-        for batch in val_dataloader:
+        for batch in valid_dl:
             move_to_cuda(batch, device)
 
             with torch.no_grad():
