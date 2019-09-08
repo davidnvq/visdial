@@ -10,7 +10,7 @@
 --ca_has_layer_norm \
 --ca_has_shared_attns \
 --ca_num_cross_attns 1 \
---img_has_bboxes \
+--img_has_classes \
 --txt_has_layer_norm \
 --txt_has_decoder_layer_norm \
 --txt_has_pos_embedding \

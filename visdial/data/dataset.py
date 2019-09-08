@@ -5,7 +5,7 @@ import torch
 from torch.nn.functional import normalize
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
-from pytorch_pretrained_bert import BertTokenizer
+# from pytorch_pretrained_bert import BertTokenizer
 from visdial.data.vocabulary import Vocabulary
 
 from visdial.data.readers import DialogsReader, DenseAnnotationsReader, ImageFeaturesHdfReader
@@ -95,7 +95,8 @@ class VisDialDataset(Dataset):
 
 	def _get_tokenizer(self, config):
 		if config['model']['txt_tokenizer'] == 'bert':
-			return BertTokenizer.from_pretrained("bert-base-uncased", do_lower_case=True)
+			pass
+			# return BertTokenizer.from_pretrained("bert-base-uncased", do_lower_case=True)
 		else:
 			path = config['dataset']['train_json_word_count_path']
 			return Vocabulary(word_counts_path=path)

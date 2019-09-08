@@ -1,11 +1,11 @@
 callbacks:
-    log_dir: /home/quang/workspace/log/tensorboard/v005_ABC_LP_Lkf_D36
+    log_dir: /home/quang/workspace/log/tensorboard/v007_ABC_LP_lkf_D36_ca2
     online: false
     path_pretrained_ckpt: null
     resume: false
-    save_dir: /media/local_workspace/quang/checkpoints/visdial/CVPR/v005_ABC_LP_Lkf_D36
+    save_dir: /media/local_workspace/quang/checkpoints/visdial/CVPR/v007_ABC_LP_lkf_D36_ca2
     validate: true
-config_name: v005_ABC_LP_Lkf_D36
+config_name: v007_ABC_LP_lkf_D36_ca2
 dataset:
     concat_hist: false
     finetune: false
@@ -34,7 +34,7 @@ model:
     ca_has_updated_hist: false
     ca_memory_size: 2
     ca_num_cross_attn_heads: 4
-    ca_num_cross_attns: 1
+    ca_num_cross_attns: 2
     decoder_type: misc
     dropout: 0.1
     hidden_size: 512
@@ -52,7 +52,7 @@ model:
     txt_tokenizer: nlp
     txt_vocab_size: 11322
 optional arguments:
-    config_name: v005_ABC_LP_Lkf_D36
+    config_name: v007_ABC_LP_lkf_D36_ca2
     help: null
     seed: 0
 positional arguments: {}

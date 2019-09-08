@@ -1,6 +1,15 @@
 import torch
 import torch.nn as nn
 
+import logging
+try:
+    from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
+except (ImportError, AttributeError) as e:
+    logging.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
+    LayerNorm = torch.nn.LayerNorm
+
+
+
 from torch.nn import functional as F
 from visdial.common import clones, SummaryAttention, DynamicRNN
 
@@ -21,7 +30,7 @@ class Encoder(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(hidden_size, hidden_size),
             # I added this line
-            nn.LayerNorm(hidden_size))
+            LayerNorm(hidden_size))
 
     def forward(self, batch):
         BS, NH = batch['ques_len'].shape

@@ -1,6 +1,14 @@
 import torch
 import torch.nn as nn
 
+import logging
+
+try:
+    from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
+except (ImportError, AttributeError) as e:
+    logging.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
+    LayerNorm = torch.nn.LayerNorm
+
 from visdial.common import PositionalEmbedding
 from visdial.common.dynamic_rnn import DynamicRNN
 
@@ -56,7 +64,7 @@ class QuesEncoder(nn.Module):
                                             batch_first=True))
 
         if config['model']['txt_has_layer_norm']:
-            self.layer_norm = nn.LayerNorm(config['model']['hidden_size'])
+            self.layer_norm = LayerNorm(config['model']['hidden_size'])
 
         if config['model']['txt_has_pos_embedding']:
             self.pos_embedding = PositionalEmbedding(config['model']['hidden_size'],
@@ -132,7 +140,7 @@ class HistEncoder(nn.Module):
                                             batch_first=True))
 
         if config['model']['txt_has_layer_norm']:
-            self.layer_norm = nn.LayerNorm(config['model']['hidden_size'])
+            self.layer_norm = LayerNorm(config['model']['hidden_size'])
 
         if config['model']['txt_has_pos_embedding']:
             self.pos_embedding = PositionalEmbedding(config['model']['hidden_size'],

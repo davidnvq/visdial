@@ -1,5 +1,14 @@
 import torch
 import torch.nn as nn
+
+import logging
+
+try:
+	from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
+except (ImportError, AttributeError) as e:
+	logging.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
+	LayerNorm = torch.nn.LayerNorm
+
 from visdial.common.utils import clones
 
 
@@ -119,10 +128,10 @@ class CrossAttentionLayer(nn.Module):
 			self.hi_mlp = NormalSubLayer(hidden_size, dropout)
 
 		if self.config['model']['ca_has_layer_norm']:
-			self.im_norm = nn.LayerNorm(hidden_size)
-			self.qe_norm = nn.LayerNorm(hidden_size)
+			self.im_norm = LayerNorm(hidden_size)
+			self.qe_norm = LayerNorm(hidden_size)
 			if self.config['model']['ca_has_updated_hist']:
-				self.hi_norm = nn.LayerNorm(hidden_size)
+				self.hi_norm = LayerNorm(hidden_size)
 
 	def forward(self, triples):
 		"""

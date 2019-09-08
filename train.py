@@ -89,7 +89,7 @@ optimizer = Adam(parameters,
                  weight_decay=config['solver']['weight_decay'])
 
 lr_scheduler = LRScheduler(optimizer,
-                           batch_size=config['solver']['batch_size'],
+                           batch_size=config['solver']['batch_size'] * torch.cuda.device_count(),
                            num_samples=config['solver']['num_samples'],
                            num_epochs=config['solver']['num_epochs'],
                            min_lr=config['solver']['min_lr'],
@@ -166,9 +166,9 @@ for epoch in range(start_epoch, config['solver']['num_epochs']):
         lr = lr_scheduler.step(global_iteration_step)
         optimizer.step()
 
-        if global_iteration_step % 200 == 0:
+        if global_iteration_step % 1000 == 0:
             logging.info("epoch={:02d}, steps={:03d}K: batch_loss:{:.03f} disc_loss:{:.03f} gen_loss:{:.03f} lr={:.05f}".format(
-                epoch, int(global_iteration_step / 200), batch_loss.item(), disc_loss.item(), gen_loss.item(), lr))
+                epoch, int(global_iteration_step / 1000), batch_loss.item(), disc_loss.item(), gen_loss.item(), lr))
 
         # log metrics
         experiment.log_metric('train/batch_loss', batch_loss.item())

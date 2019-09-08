@@ -71,7 +71,7 @@ solver:
     kd_alpha: null
     kd_temperature: null
     linear_gama: null
-    ls_epsilon: 0.1
+    ls_epsilon: 0.0
     milestone_steps: null
     min_lr: 1.0e-05
     num_epochs: 30

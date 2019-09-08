@@ -4,12 +4,12 @@
 #$-j y
 #$-cwd
 #$-V
-#$-o /home/quang/workspace/log/qsub/v001_abc_LP_lkf_Dlegacy.log
-#$-q main.q@yagi14.vision.is.tohoku
+#$-o /home/quang/workspace/log/qsub/check_v001_abc_LP_lkf_Dlegacy.log
+#$-q main.q@yagi08.vision.is.tohoku
 
 export CUDA_VISIBLE_DEVICES=$SGE_GPU
-python /home/quang/workspace/repos/visdial/train.py \
---config_name v001_abc_LP_lkf_Dlegacy \
+python /home/quang/workspace/repos/visdial/train_check.py \
+--config_name v001_abc_LP_lkf_Dlegacy_check \
 --decoder_type misc \
 --init_lr 0.005 \
 --batch_size 8 \
@@ -25,4 +25,4 @@ python /home/quang/workspace/repos/visdial/train.py \
 --txt_has_pos_embedding \
 --val_feat_img_path "/media/local_workspace/quang/datasets/visdial/legacy/features_faster_rcnn_x101_val.h5" \
 --train_feat_img_path "/media/local_workspace/quang/datasets/visdial/legacy/features_faster_rcnn_x101_train.h5" \
->> /home/quang/workspace/log/qsub/v001_abc_LP_lkf_Dlegacy.txt
+>> /home/quang/workspace/log/qsub/v001_abc_LP_lkf_Dlegacy_check.txt

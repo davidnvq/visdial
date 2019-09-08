@@ -32,7 +32,7 @@ import h5py
 # A bit slow, and just splits sentences to list of words, can be doable in
 # `DialogsReader`.
 from nltk.tokenize import word_tokenize
-from pytorch_pretrained_bert import BertTokenizer
+# from pytorch_pretrained_bert import BertTokenizer
 from tqdm import tqdm
 import os
 from nltk.tokenize import word_tokenize
@@ -52,7 +52,8 @@ class DialogsReader(object):
 		if config['model']['txt_tokenizer'] == 'nlp':
 			self.tokenize = word_tokenize
 		elif config['model']['txt_tokenizer'] == 'bert':
-			self.tokenize = BertTokenizer.from_pretrained('bert-base-uncased').tokenize
+			pass
+			# self.tokenize = BertTokenizer.from_pretrained('bert-base-uncased').tokenize
 
 		self.config = config
 

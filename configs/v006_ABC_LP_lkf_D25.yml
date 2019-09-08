@@ -1,11 +1,11 @@
 callbacks:
-    log_dir: /home/quang/workspace/log/tensorboard/v005_ABC_LP_Lkf_D36
+    log_dir: /home/quang/workspace/log/tensorboard/v006_ABC_LP_lkf_D25
     online: false
     path_pretrained_ckpt: null
     resume: false
-    save_dir: /media/local_workspace/quang/checkpoints/visdial/CVPR/v005_ABC_LP_Lkf_D36
+    save_dir: /media/local_workspace/quang/checkpoints/visdial/CVPR/v006_ABC_LP_lkf_D25
     validate: true
-config_name: v005_ABC_LP_Lkf_D36
+config_name: v006_ABC_LP_lkf_D25
 dataset:
     concat_hist: false
     finetune: false
@@ -16,12 +16,12 @@ dataset:
     max_seq_len: 20
     num_boxes: fixed
     overfit: false
-    train_feat_img_path: /media/local_workspace/quang/datasets/visdial/bottom-up-attention/trainval_resnet101_faster_rcnn_genome__num_boxes_(36,
-        36).h5
+    train_feat_img_path: /media/local_workspace/quang/datasets/visdial/bottom-up-attention/trainval_resnet101_faster_rcnn_genome__num_boxes_(25,
+        25).h5
     train_json_dialog_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_train.json
     train_json_word_count_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_word_counts_train.json
-    val_feat_img_path: /media/local_workspace/quang/datasets/visdial/bottom-up-attention/val2018_resnet101_faster_rcnn_genome__num_boxes_(36,
-        36).h5
+    val_feat_img_path: /media/local_workspace/quang/datasets/visdial/bottom-up-attention/val2018_resnet101_faster_rcnn_genome__num_boxes_(25,
+        25).h5
     val_json_dense_dialog_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_val_dense_annotations.json
     val_json_dialog_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_val.json
     vocab_min_count: 5
@@ -52,7 +52,7 @@ model:
     txt_tokenizer: nlp
     txt_vocab_size: 11322
 optional arguments:
-    config_name: v005_ABC_LP_Lkf_D36
+    config_name: v006_ABC_LP_lkf_D25
     help: null
     seed: 0
 positional arguments: {}

@@ -15,7 +15,7 @@ python /home/quang/workspace/repos/visdial/train.py \
 --batch_size 8 \
 --num_epochs 30 \
 --num_samples 123287 \
---ls_epsilon 0.1 \
+--ls_epsilon 0.0 \
 --dropout 0.1 \
 --ca_has_layer_norm \
 --ca_has_shared_attns \

@@ -77,8 +77,18 @@ optimizer = Adam(parameters,
                  eps=config['solver']['adam_eps'],
                  weight_decay=config['solver']['weight_decay'])
 
-lr_scheduler = LRScheduler(optimizer, **config['solver'])
-
+lr_scheduler = LRScheduler(optimizer,
+                           batch_size=config['solver']['batch_size'] * torch.cuda.device_count(),
+                           num_samples=config['solver']['num_samples'],
+                           num_epochs=config['solver']['num_epochs'],
+                           min_lr=config['solver']['min_lr'],
+                           init_lr=config['solver']['init_lr'],
+                           warmup_factor=config['solver']['warmup_factor'],
+                           warmup_epochs=config['solver']['warmup_epochs'],
+                           scheduler_type=config['solver']['scheduler_type'],
+                           milestone_steps=config['solver']['milestone_steps'],
+                           linear_gama=config['solver']['linear_gama']
+                           )
 # =============================================================================
 #   SETUP BEFORE TRAINING LOOP
 # =============================================================================

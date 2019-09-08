@@ -1,5 +1,13 @@
 import torch
-from torch import nn
+import torch.nn as nn
+
+import logging
+
+try:
+    from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
+except (ImportError, AttributeError) as e:
+    logging.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
+    LayerNorm = torch.nn.LayerNorm
 
 
 class ImageEncoder(nn.Module):
@@ -10,18 +18,18 @@ class ImageEncoder(nn.Module):
         self.config = config
 
         self.img_linear = nn.Sequential(
-            nn.LayerNorm(config['model']['img_feat_size']),
+            LayerNorm(config['model']['img_feat_size']),
             nn.Linear(config['model']['img_feat_size'],
                       config['model']['hidden_size']),
             nn.ReLU(inplace=True),
             nn.Dropout(p=config['model']['dropout']),
-            nn.LayerNorm(config['model']['hidden_size']),
+            LayerNorm(config['model']['hidden_size']),
         )
 
         if self.config['model']['img_has_classes'] or \
                 self.config['model']['img_has_attributes'] or \
                 self.config['model']['img_has_bboxes']:
-            self.img_norm = nn.LayerNorm(config['model']['hidden_size'])
+            self.img_norm = LayerNorm(config['model']['hidden_size'])
 
         self.text_embedding = nn.Embedding(config['model']['txt_vocab_size'],
                                            config['model']['txt_embedding_size'])
@@ -32,7 +40,7 @@ class ImageEncoder(nn.Module):
                           config['model']['hidden_size']),
                 nn.ReLU(inplace=True),
                 nn.Dropout(p=config['model']['dropout']),
-                nn.LayerNorm(config['model']['hidden_size'])
+                LayerNorm(config['model']['hidden_size'])
             )
 
         if self.config['model']['img_has_attributes']:
@@ -41,7 +49,7 @@ class ImageEncoder(nn.Module):
                           config['model']['hidden_size']),
                 nn.ReLU(inplace=True),
                 nn.Dropout(p=config['model']['dropout']),
-                nn.LayerNorm(config['model']['hidden_size'])
+                LayerNorm(config['model']['hidden_size'])
             )
 
         if self.config['model']['img_has_bboxes']:
@@ -56,7 +64,7 @@ class ImageEncoder(nn.Module):
                           config['model']['hidden_size']),
                 nn.ReLU(inplace=True),
                 nn.Dropout(p=config['model']['dropout']),
-                nn.LayerNorm(config['model']['hidden_size'])
+                LayerNorm(config['model']['hidden_size'])
             )
 
     def forward(self, batch):

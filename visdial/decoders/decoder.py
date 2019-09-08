@@ -1,5 +1,14 @@
 import torch
 import torch.nn as nn
+
+import logging
+
+try:
+    from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
+except (ImportError, AttributeError) as e:
+    logging.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
+    LayerNorm = torch.nn.LayerNorm
+
 from visdial.common.dynamic_rnn import DynamicRNN
 
 
@@ -23,7 +32,8 @@ class DiscriminativeDecoder(nn.Module):
         )
 
         if config['model']['txt_has_decoder_layer_norm']:
-            self.layer_norm = nn.LayerNorm(config['model']['hidden_size'])
+            self.layer_norm1 = LayerNorm(config['model']['hidden_size'] * 2)
+            self.layer_norm2 = LayerNorm(config['model']['hidden_size'])
 
 
         self.option_linear = nn.Linear(config['model']['hidden_size'] * 2,
@@ -87,6 +97,10 @@ class DiscriminativeDecoder(nn.Module):
         # shape: [BS x NR x NO, HS x 2]
         nonzero_options_embed = torch.cat([nonzero_options_embed[0], nonzero_options_embed[1]], dim=-1)
 
+        if self.config['model']['txt_has_decoder_layer_norm']:
+            nonzero_options_embed = self.layer_norm1(nonzero_options_embed)
+
+
         # shape: [BS x NR x NO, HS]
         nonzero_options_embed = self.option_linear(nonzero_options_embed)
 
@@ -94,7 +108,7 @@ class DiscriminativeDecoder(nn.Module):
         options_embed = torch.zeros(BS * NR * NO, HS, device=options.device)
 
         if self.config['model']['txt_has_decoder_layer_norm']:
-            options_embed = self.layer_norm(options_embed)
+            options_embed = self.layer_norm2(options_embed)
 
         # shape: [BS x NR x NO, HS]
         options_embed[nonzero_options_length_indices] = nonzero_options_embed
@@ -157,7 +171,7 @@ class GenerativeDecoder(nn.Module):
         )
 
         if config['model']['txt_has_decoder_layer_norm']:
-            self.layer_norm = nn.LayerNorm(config['model']['hidden_size'])
+            self.layer_norm = LayerNorm(config['model']['hidden_size'])
 
         self.lstm_to_words = nn.Linear(
             config['model']['hidden_size'], config['model']['txt_vocab_size']
