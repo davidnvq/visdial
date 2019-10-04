@@ -17,5 +17,4 @@
 --val_feat_img_path "/home/quang/datasets/visdial/bottom-up-attention/val2018_resnet101_faster_rcnn_genome__num_boxes_(36, 36).h5" \
 --train_feat_img_path "/home/quang/datasets/visdial/bottom-up-attention/val2018_resnet101_faster_rcnn_genome__num_boxes_(36, 36).h5" \
 --train_json_dialog_path "/home/quang/datasets/visdial/annotations/visdial_1.0_val.json"
-# >> /home/administrator/quang/workspace/log/fp16/v003_aBc_LP_Lkf_D36.txt
-
+# >> /home/administrator/quang/workspace/log/fp16/v003_aBc_LP_Lkf_D36.txtnote

@@ -9,7 +9,7 @@
 
 export CUDA_VISIBLE_DEVICES=$SGE_GPU
 python /home/quang/workspace/repos/visdial/train.py \
---config_name v001_abc_LP_lkf_Dlegacy \
+--config_name test/v001_abc_LP_lkf_Dlegacy \
 --decoder_type misc \
 --init_lr 0.005 \
 --batch_size 8 \

@@ -34,6 +34,7 @@ class VisDialDataset(Dataset):
 		self.img_feat_reader = self._get_img_feat_reader(config, split)
 		self.dense_ann_feat_reader = self._get_dense_ann_feat_reader(config, split)
 		self.image_ids = list(self.dialogs_reader.dialogs.keys())
+		self.image_ids = list(self.dialogs_reader.dialogs.keys())
 
 		if config['dataset']['overfit']:
 			self.image_ids = self.image_ids[:config['solver']['num_samples']]
