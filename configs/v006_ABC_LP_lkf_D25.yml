@@ -24,6 +24,8 @@ dataset:
         25).h5
     val_json_dense_dialog_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_val_dense_annotations.json
     val_json_dialog_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_val.json
+    test_json_dialog_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_test.json
+    test_feat_img_path: /media/local_workspace/quang/datasets/visdial/bottom-up-attention/test2018_resnet101_faster_rcnn_genome__num_boxes_(25, 25).h5
     vocab_min_count: 5
 help: null
 model:

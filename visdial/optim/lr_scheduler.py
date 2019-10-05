@@ -80,8 +80,6 @@ class LRScheduler(object):
         return self.init_lr * (1 + math.cos(math.pi * cur_iter / total_iters)) / 2
 
 
-
-
 def test_lr_scheduler(scheduler_type='LinearLR'):
     import torch
     import numpy as np

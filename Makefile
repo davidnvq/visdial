@@ -14,6 +14,7 @@ yagi22: clean
 	../visdial administrator@yagi22:/home/administrator/quang/workspace/repos
 
 
+
 pull22: clean
 	rsync -av \
 	--update \

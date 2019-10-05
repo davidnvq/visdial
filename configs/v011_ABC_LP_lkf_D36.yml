@@ -1,11 +1,11 @@
 callbacks:
-    log_dir: /home/quang/workspace/log/tensorboard/v011_ABC_LP_lkf_D50.log
+    log_dir: /home/quang/workspace/log/tensorboard/v011_ABC_LP_lkf_D36
     online: false
     path_pretrained_ckpt: null
     resume: false
-    save_dir: /media/local_workspace/quang/checkpoints/visdial/CVPR/v011_ABC_LP_lkf_D50.log
+    save_dir: /media/local_workspace/quang/checkpoints/visdial/CVPR/v011_ABC_LP_lkf_D36
     validate: true
-config_name: v011_ABC_LP_lkf_D50.log
+config_name: v011_ABC_LP_lkf_D36
 dataset:
     concat_hist: false
     finetune: false
@@ -24,6 +24,8 @@ dataset:
         36).h5
     val_json_dense_dialog_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_val_dense_annotations.json
     val_json_dialog_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_val.json
+    test_json_dialog_path: /media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_test.json
+    test_feat_img_path: /media/local_workspace/quang/datasets/visdial/bottom-up-attention/test2018_resnet101_faster_rcnn_genome__num_boxes_(36, 36).h5
     vocab_min_count: 5
 help: null
 model:
@@ -52,7 +54,7 @@ model:
     txt_tokenizer: nlp
     txt_vocab_size: 11322
 optional arguments:
-    config_name: v011_ABC_LP_lkf_D50.log
+    config_name: v011_ABC_LP_lkf_D36
     help: null
     seed: 0
 positional arguments: {}

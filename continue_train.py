@@ -1,6 +1,5 @@
-# from comet_ml import Experiment, OfflineExperiment
-# ssh zao/ su - administrator
-# sudo qmod -c "*"
+from comet_ml import Experiment, OfflineExperiment
+
 import os
 import sys
 import torch
@@ -17,39 +16,20 @@ from visdial.utils import move_to_cuda
 from options import get_comet_experiment, get_training_config_and_args
 from torch.utils.tensorboard import SummaryWriter
 from visdial.optim import Adam, LRScheduler, get_weight_decay_params
-from visdial.loss import FinetuneLoss
-import argparse
-import yaml
-import json
-from tqdm import tqdm
-import itertools
 
 # Load config
-parser = argparse.ArgumentParser()
-parser.add_argument('--config', default='configs/v002_abc_LP_lkf_D36.yml')
-parser.add_argument('--path_pretrained_ckpt', default='')
-parser.add_argument('--num_epochs', type=int, default=10)
-
-args = parser.parse_args()
-config = yaml.load(open(args.config),Loader=yaml.SafeLoader)
-
-config['dataset']['train_json_dense_dialog_path'] = '/media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_train_dense_sample.json'
-config['dataset']['finetune'] = True
-config['callbacks']['path_pretrained_ckpt'] = args.path_pretrained_ckpt
-config['solver']['num_epochs'] = args.num_epochs
+config, args = get_training_config_and_args()
+# import yaml
+# config_yml = 'configs/overfit_50epoch_lseps_0.2.yml'
+# config = yaml.load(open(config_yml),Loader=yaml.SafeLoader)
 
 # Set logging
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
                     format=log_format, datefmt='%m/%d %I:%M:%S %p')
 
-
 # Set comet
-# experiment = Experiment(api_key='2z9VHjswAJWF1TV6x4WcFMVss',
-# 	                  project_name='finetune',
-# 	                  workspace='lightcv')
-
-print(json.dumps(config, indent=2))
+experiment = get_comet_experiment(config)
 
 # For reproducibility
 seed = config['seed']
@@ -80,43 +60,43 @@ print("Loading val dataset...")
 val_dataset = VisDialDataset(config, split='val')
 
 val_dataloader = DataLoader(val_dataset,
-                            batch_size=config['solver']['batch_size'] * torch.cuda.device_count(),
-                            num_workers=config['solver']['cpu_workers'],
-                            shuffle=True)
-
-eval_dataloader = DataLoader(val_dataset,
-                            batch_size= 1 * torch.cuda.device_count(),
-                            num_workers=config['solver']['cpu_workers'],
-                            shuffle=False)
-
+                            batch_size=2 * torch.cuda.device_count(),
+                            num_workers=config['solver']['cpu_workers'])
 
 """MODEL INIT"""
 logging.info("Init model...")
+print("Init model...")
 device = torch.device('cuda')
 model = get_model(config)
-
-# load weights
-model.load_state_dict(torch.load(config['callbacks']['path_pretrained_ckpt'])['model'])
-
 logging.info("Move model to GPU...")
+print("Move model to GPU...")
 model = model.to(device)
 
 """LOSS FUNCTION"""
-disc_criterion = FinetuneLoss()
+from visdial.loss import VisdialLoss
 
+disc_criterion = VisdialLoss(LS_epsilon=config['solver']['ls_epsilon'], return_mean=True)
+gen_criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 """OPTIMIZER"""
-optimizer = Adam(model.parameters(), lr=5e-5)
+# optimizer = optim.Adam(model.parameters(), lr=config['solver']['lr'])
+# scheduler = MultiStepLR(optimizer, milestones=config['solver']['lr_steps'], gamma=config['solver']['lr_gama'])
+
+parameters = get_weight_decay_params(model, weight_decay=config['solver']['weight_decay'])
+optimizer = Adam(parameters,
+                 betas=config['solver']['adam_betas'],
+                 eps=config['solver']['adam_eps'],
+                 weight_decay=config['solver']['weight_decay'])
 
 lr_scheduler = LRScheduler(optimizer,
                            batch_size=config['solver']['batch_size'] * torch.cuda.device_count(),
-                           num_samples=2064 + 2000,
+                           num_samples=config['solver']['num_samples'],
                            num_epochs=config['solver']['num_epochs'],
-                           min_lr=1e-5,
-                           init_lr=5e-5,
+                           min_lr=config['solver']['min_lr'],
+                           init_lr=config['solver']['init_lr'],
                            warmup_factor=config['solver']['warmup_factor'],
-                           warmup_epochs=1,
-                           scheduler_type='CosineLR',
+                           warmup_epochs=config['solver']['warmup_epochs'],
+                           scheduler_type=config['solver']['scheduler_type'],
                            milestone_steps=config['solver']['milestone_steps'],
                            linear_gama=config['solver']['linear_gama']
                            )
@@ -124,12 +104,8 @@ lr_scheduler = LRScheduler(optimizer,
 # =============================================================================
 #   SETUP BEFORE TRAINING LOOP
 # =============================================================================
-finetune_path = os.path.dirname(config['callbacks']['path_pretrained_ckpt']) + '/finetune'
-if not os.path.exists(finetune_path):
-    os.makedirs(finetune_path)
-
-summary_writer = SummaryWriter(log_dir=finetune_path)
-checkpoint_manager = CheckpointManager(model, optimizer, finetune_path, config=config)
+summary_writer = SummaryWriter(log_dir=config['callbacks']['log_dir'])
+checkpoint_manager = CheckpointManager(model, optimizer, config['callbacks']['save_dir'], config=config)
 sparse_metrics = SparseGTMetrics()
 disc_metrics = SparseGTMetrics()
 gen_metrics = SparseGTMetrics()
@@ -137,6 +113,8 @@ ndcg = NDCG()
 disc_ndcg = NDCG()
 gen_ndcg = NDCG()
 
+logging.info("Loading checkpoints...")
+start_epoch, model, optimizer = load_checkpoint_from_config(model, optimizer, config)
 
 if torch.cuda.device_count() > 1:
     model = nn.DataParallel(model)
@@ -145,68 +123,63 @@ if torch.cuda.device_count() > 1:
 #   TRAINING LOOP
 # =============================================================================
 
-config["solver"]["training_splits"] = 'trainval'
-
-start_epoch = 0
-if config["solver"]["training_splits"] == "trainval":
-    iterations = (len(train_dataset) + len(val_dataset)) // (
-				torch.cuda.device_count() * config["solver"]["batch_size"]) + 1
-    num_examples = torch.tensor(len(train_dataset) + len(val_dataset), dtype=torch.float)
-else:
-    iterations = len(train_dataset) // (config['solver']['batch_size'] * torch.cuda.device_count()) + 1
-    num_examples = torch.tensor(len(train_dataset), dtype=torch.float)
-
+iterations = len(train_dataset) // (config['solver']['batch_size'] * torch.cuda.device_count()) + 1
+num_examples = torch.tensor(len(train_dataset), dtype=torch.float)
 global_iteration_step = start_epoch * iterations
 
 for epoch in range(start_epoch, config['solver']['num_epochs']):
     logging.info(f"Training for epoch {epoch}:")
+    print(f"Training for epoch {epoch}:")
 
-    with tqdm(total=iterations) as pbar:
-        if config["solver"]["training_splits"] == "trainval":
-            combined_dataloader = itertools.chain(train_dataloader, val_dataloader)
-        else:
-            combined_dataloader = itertools.chain(train_dataloader)
+    epoch_loss = torch.tensor(0.0)
+    for i, batch in enumerate(train_dataloader):
+        batch = move_to_cuda(batch, device)
 
-        epoch_loss = torch.tensor(0.0)
-        for i, batch in enumerate(combined_dataloader):
-            batch = move_to_cuda(batch, device)
+        # zero out gradients
+        optimizer.zero_grad()
 
-            # zero out gradients
-            lr = lr_scheduler.step(global_iteration_step)
-            optimizer.zero_grad()
+        # do forward
+        out = model(batch)
 
-            # do forward
-            out = model(batch)
+        # compute loss
+        gen_loss = torch.tensor(0.0, requires_grad=True, device='cuda')
+        disc_loss = torch.tensor(0.0, requires_grad=True, device='cuda')
+        batch_loss = torch.tensor(0.0, requires_grad=True, device='cuda')
+        if out.get('opt_scores') is not None:
+            scores = out['opt_scores'].view(-1, 100)
+            target = batch['ans_ind'].view(-1)
 
-            # compute loss
-            batch_loss = torch.tensor(0.0, requires_grad=True, device='cuda')
-            if out.get('opt_scores') is not None:
-                scores = out['opt_scores']
+            sparse_metrics.observe(out['opt_scores'], batch['ans_ind'])
+            disc_loss = disc_criterion(scores, target)
+            batch_loss = batch_loss + disc_loss
 
-                sparse_metrics.observe(out['opt_scores'], batch['ans_ind'])
-                batch_loss = disc_criterion(scores, batch)
+        if out.get('ans_out_scores') is not None:
+            scores = out['ans_out_scores'].view(-1, config['model']['txt_vocab_size'])
+            target = batch['ans_out'].view(-1)
+            gen_loss = gen_criterion(scores, target)
+            batch_loss = batch_loss + gen_loss
 
-            # compute gradients
-            batch_loss.backward()
+        # compute gradients
+        batch_loss.backward()
 
-            # update params
-            optimizer.step()
+        # update params
+        lr = lr_scheduler.step(global_iteration_step)
+        optimizer.step()
 
-            pbar.update(1)
-            pbar.set_postfix(epoch=epoch,
-                             batch_loss=batch_loss.item())
+        if global_iteration_step % 1000 == 0:
+            logging.info("epoch={:02d}, steps={:03d}K: batch_loss:{:.03f} disc_loss:{:.03f} gen_loss:{:.03f} lr={:.05f}".format(
+                epoch, int(global_iteration_step / 1000), batch_loss.item(), disc_loss.item(), gen_loss.item(), lr))
 
-            # log metrics
-            # experiment.log_metric('train/batch_loss', batch_loss.item())
-            summary_writer.add_scalar(f'{args.config}-train/batch_loss', batch_loss.item(), global_iteration_step)
+        # log metrics
+        experiment.log_metric('train/batch_loss', batch_loss.item())
+        summary_writer.add_scalar(config['config_name'] + "-train/batch_loss", batch_loss.item(), global_iteration_step)
+        experiment.log_metric('train/lr', lr)
+        summary_writer.add_scalar("train/batch_lr", lr, global_iteration_step)
 
-            # experiment.log_metric('train/lr', lr)
-            summary_writer.add_scalar("train/batch_lr", lr, global_iteration_step)
+        global_iteration_step += 1
+        torch.cuda.empty_cache()
 
-            global_iteration_step += 1
-            torch.cuda.empty_cache()
-
-            epoch_loss += batch["ans"].size(0) * batch_loss.detach()
+        epoch_loss += batch["ans"].size(0) * batch_loss.detach()
 
     if out.get('opt_scores') is not None:
         avg_metric_dict = {}
@@ -214,14 +187,17 @@ for epoch in range(start_epoch, config['solver']['num_epochs']):
 
         for metric_name, metric_value in avg_metric_dict.items():
             logging.info(f"{metric_name}: {metric_value}")
-            # experiment.log_metric(f"train/{metric_name}", metric_value)
+            experiment.log_metric(f"train/{metric_name}", metric_value)
 
-        summary_writer.add_scalars(f"{args.config}-train/metrics", avg_metric_dict, global_iteration_step)
+        summary_writer.add_scalars(config['config_name'] + "-train/metrics", avg_metric_dict, global_iteration_step)
 
     epoch_loss /= num_examples
-    # experiment.log_metric('train/epoch_loss', epoch_loss.item())
+    experiment.log_metric('train/epoch_loss', epoch_loss.item())
     logging.info(f"train/epoch_loss: {epoch_loss.item()}\n")
-    summary_writer.add_scalar(f'{args.config}-train/epoch_loss', epoch_loss.item(), global_iteration_step)
+    summary_writer.add_scalar(config['config_name'] + "-train/epoch_loss", epoch_loss.item(), global_iteration_step)
+
+    for name, param in model.named_parameters():
+        summary_writer.add_histogram(name, param.clone().cpu().data.numpy(), global_iteration_step)
 
     # -------------------------------------------------------------------------
     #   ON EPOCH END  (checkpointing and validation)
@@ -234,7 +210,7 @@ for epoch in range(start_epoch, config['solver']['num_epochs']):
 
         logging.info(f"\nValidation after epoch {epoch}:")
 
-        for batch in tqdm(eval_dataloader):
+        for batch in val_dataloader:
             move_to_cuda(batch, device)
 
             with torch.no_grad():
@@ -288,25 +264,44 @@ for epoch in range(start_epoch, config['solver']['num_epochs']):
         for metric_dict in [avg_metric_dict, disc_metric_dict, gen_metric_dict]:
             for metric_name, metric_value in metric_dict.items():
                 logging.info(f"{metric_name}: {metric_value}")
-                # experiment.log_metric(f"val/{metric_name}", metric_value)
+                experiment.log_metric(f"val/{metric_name}", metric_value)
 
-            summary_writer.add_scalars(f"{args.config}-val/metrics", metric_dict, global_iteration_step)
+            summary_writer.add_scalars(config['config_name'] + "-val/metrics", metric_dict, global_iteration_step)
 
         model.train()
         torch.cuda.empty_cache()
 
         # Checkpoint
-        if epoch > 3:
+        if 'disc' in config['model']['decoder_type']:
             checkpoint_manager.step(epoch=epoch, only_best=False, metrics=disc_metric_dict, key='disc_')
+
+        elif 'gen' in config['model']['decoder_type']:
+            checkpoint_manager.step(epoch=epoch, only_best=False, metrics=gen_metric_dict, key='gen_')
+
+        elif 'misc' in config['model']['decoder_type']:
+            checkpoint_manager.step(epoch=epoch, only_best=False, metrics=disc_metric_dict, key='disc_')
+
+summary_writer.close()
 
 # Log the model state_dict with best ndcg and best mean
 best_mean_epoch = checkpoint_manager.best_mean_epoch
 best_ndcg_epoch = checkpoint_manager.best_ndcg_epoch
 
 logging.info(f'save best mean epoch: {best_mean_epoch}')
-logging.info(f'save best ndcg epoch: {best_ndcg_epoch}')
+logging.info(os.path.join(config['callbacks']['save_dir'], f"checkpoint_{best_mean_epoch}.pth"))
 
-summary_writer.add_scalar('best_mean_epoch', best_mean_epoch)
-summary_writer.add_scalar('best_ndcg_epoch', best_ndcg_epoch)
-summary_writer.close()
-print(finetune_path)
+logging.info(f'save best ndcg epoch: {best_ndcg_epoch}')
+logging.info(os.path.join(config['callbacks']['save_dir'], f"checkpoint_{best_ndcg_epoch}.pth"))
+
+skip_list = [os.path.join(config['callbacks']['save_dir'], f"checkpoint_{best_mean_epoch}.pth"),
+             os.path.join(config['callbacks']['save_dir'], f"checkpoint_{best_ndcg_epoch}.pth"),
+             os.path.join(config['callbacks']['save_dir'], "checkpoint_last.pth")]
+
+from glob import glob
+
+all_checkpoints = glob(config['callbacks']['save_dir'] + '/*.pth')
+for ckpt_path in all_checkpoints:
+    if 'last' in ckpt_path or ckpt_path in skip_list:
+        continue
+    else:
+        os.system(f"rm {ckpt_path}")
