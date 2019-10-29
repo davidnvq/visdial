@@ -3,12 +3,12 @@
 #$ -l h_rt=72:00:00
 #$ -j y
 #$ -cwd
-#$ -o /home/acb11402ci/log/s41.txt
+#$ -o /home/acb11402ci/log/rs41.txt
 
 source ~/.bashrc
 module load cuda/10.0/10.0.130.1
 python ~/workspace/repos/visdial/train.py \
---config_name s41 \
+--config_name rs41 \
 --decoder_type misc \
 --init_lr 0.001 \
 --scheduler_type "LinearLR" \
