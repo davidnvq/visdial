@@ -6,12 +6,12 @@ class LRScheduler(object):
 
     def __init__(self, optimizer,
                  batch_size, num_samples, num_epochs,
-                 init_lr=0.01,
+                 init_lr=0.001,
                  min_lr=1e-4,
                  warmup_factor=0.1,
                  warmup_epochs=1,
                  scheduler_type='CosineLR',
-                 milestone_steps=[4, 8, 12, 16, 20, 24, 28],
+                 milestone_steps=[3, 5, 7, 9, 11, 13],
                  linear_gama=0.5,
                  **kwargs
                  ):
@@ -20,7 +20,8 @@ class LRScheduler(object):
 
         self._SCHEDULER = {
             'CosineLR': self.cosine_step,
-            'LinearLR': self.linear_step
+            'LinearLR': self.linear_step,
+            'CosineStepLR': self.cosine_multi_step
         }
         self.scheduler_step = self._SCHEDULER[scheduler_type]
         self.scheduler_type = scheduler_type
@@ -78,6 +79,27 @@ class LRScheduler(object):
         # return self.init_lr * (1 + math.cos(math.pi * current_epoch / self.num_epochs)) / 2
         total_iters = self.num_epochs * self.total_iters_per_epoch
         return self.init_lr * (1 + math.cos(math.pi * cur_iter / total_iters)) / 2
+
+    def cosine_multi_step(self, cur_iter):
+        milestones = [1, 8, 16, 24, 32]
+
+        def find_range(cur_epoch):
+            for i, milestone in enumerate(milestones):
+                if cur_epoch >= milestone:
+                    continue
+                else:
+                    return i-1, milestones[i - 1], milestones[i]
+
+        cur_epoch = int(cur_iter / self.total_iters_per_epoch)
+        idx, low_epoch, high_epoch = find_range(cur_epoch)
+        rel_iter = cur_iter - low_epoch * self.total_iters_per_epoch
+        if idx < 3:
+            lr = self.init_lr * pow(self.linear_gama, idx)
+        else:
+            lr = 1.25e-4
+        total_iters = (high_epoch - low_epoch) * self.total_iters_per_epoch
+        return lr * (1 + math.cos(math.pi * rel_iter / total_iters)) / 2
+
 
 
 def test_lr_scheduler(scheduler_type='LinearLR'):

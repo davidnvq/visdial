@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-from visdial.encoders.encoder import LateFusionEncoder
 from visdial.decoders.decoder import DiscriminativeDecoder, GenerativeDecoder, MiscDecoder
 from visdial.encoders import ImageEncoder, TextEncoder, HistEncoder, QuesEncoder, CrossAttentionEncoder, Encoder
 
@@ -24,8 +23,8 @@ class VisdialModel(nn.Module):
 				param = param.data
 			own_state[name].copy_(param)
 
-	def forward(self, batch):
-		return self.decoder(batch, self.encoder(batch))
+	def forward(self, batch, test_mode=False):
+		return self.decoder(batch, self.encoder(batch, test_mode=test_mode), test_mode=test_mode)
 
 	def weight_init(self, m):
 

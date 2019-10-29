@@ -1,15 +1,6 @@
 import torch
 import torch.nn as nn
-
-import logging
-
-try:
-	from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
-except (ImportError, AttributeError) as e:
-	logging.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
-	LayerNorm = torch.nn.LayerNorm
-
-from visdial.common.utils import clones
+from visdial.common.utils import clones, check_flag
 
 
 class NormalSubLayer(nn.Module):
@@ -79,7 +70,12 @@ class MultiHeadAttention(nn.Module):
 		mask_x = mask_x[:, None, :, None].repeat(1, self.num_heads, 1, N_mem)
 		mask_y = mask_y[:, None, None, :].repeat(1, self.num_heads, M_mem, 1)
 
+		# X_mem: [bs, mem_size + M, hidden_size]
+		# X_proj [bs, mem_size + M, num_heas, d_h]
 		X_mem, X_proj = self.project(x, self.x_memory, self.x_proj_linear)
+
+		# Y_mem: [bs, mem_size + N, hidden_size]
+		# Y_proj [bs, mem_size + N, num_heas, d_h]
 		Y_mem, Y_proj = self.project(y, self.y_memory, self.y_proj_linear)
 
 		# (1) shape [bs, num_heads, mem_size + M, d_h]
@@ -92,25 +88,60 @@ class MultiHeadAttention(nn.Module):
 		affinity_matrix = affinity_matrix.masked_fill(mask_x == 0, -1e9)
 		affinity_matrix = affinity_matrix.masked_fill(mask_y == 0, -1e9)
 
+		# shape: [bs, num_heads, mem_size + M, mem_size + N]
 		attn_X_guided_by_Y = torch.softmax(affinity_matrix, dim=2)
 		attn_Y_guided_by_X = torch.softmax(affinity_matrix, dim=3)
 
-		# (1) shape [bs, mem_size + M, mem_size + N]
-		# (2) shape [bs, mem_size + M, mem_size + N]
-		attn_X_guided_by_Y = torch.mean(attn_X_guided_by_Y, dim=1)
-		attn_Y_guided_by_X = torch.mean(attn_Y_guided_by_X, dim=1)
+		if check_flag(self.config['model'], 'ca_every_head_attn'):
+			# shape [bs, mem_size + M, num_heads, d_h]
+			X_mem = X_mem.view(X_mem.size(0), X_mem.size(1), self.num_heads, self.d_h)
+			# shape [bs, num_heads, mem_size + M, d_h]
+			X_mem = X_mem.permute(0, 2, 1, 3).contiguous()
 
-		# self.attn_X_guided_by_Y = attn_X_guided_by_Y
-		# self.attn_Y_guided_by_X = attn_Y_guided_by_X
+			# shape [bs, num_heads, mem_size + N, d_h]
+			X_attends_in_Y = torch.matmul(attn_X_guided_by_Y.transpose(2, 3), X_mem)
 
-		# (1) shape: [bs, mem_size + N, hidden_size]
-		# (2) shape: [bs, mem_size + M, hidden_size]
-		X_attends_in_Y = torch.matmul(attn_X_guided_by_Y.transpose(1, 2), X_mem)
-		Y_attends_in_X = torch.matmul(attn_Y_guided_by_X, Y_mem)
+			# shape [bs, num_heads, N, d_h]
+			X_attends_in_Y = X_attends_in_Y[:, :, self.memory_size:, :]
+			# shape [bs, N, num_heads, d_h]
+			X_attends_in_Y = X_attends_in_Y.permute(0, 2, 1, 3).contiguous()
+			# shape [bs, N, num_heads, hidden_size]
+			X_attends_in_Y = X_attends_in_Y.view(X_attends_in_Y.size(0), X_attends_in_Y.size(1), -1)
+			# shape [bs, mem_size + N, num_heads, d_h]
+			Y_mem = Y_mem.view(Y_mem.size(0), Y_mem.size(1), self.num_heads, self.d_h)
 
-		X_attends_in_Y = X_attends_in_Y[:, self.memory_size:, :]
-		Y_attends_in_X = Y_attends_in_X[:, self.memory_size:, :]
-		return X_attends_in_Y, Y_attends_in_X
+			# shape [bs, num_heads, mem_size + N, d_h]
+			Y_mem = Y_mem.permute(0, 2, 1, 3).contiguous()
+
+			# shape [bs, num_heads, mem_size + M, d_h]
+			Y_attends_in_X = torch.matmul(attn_Y_guided_by_X, Y_mem)
+			# shape [bs, num_heads, M, d_h]
+			Y_attends_in_X = Y_attends_in_X[:, :, self.memory_size:, :]
+
+			# shape [bs, M, num_heads, d_h]
+			Y_attends_in_X = Y_attends_in_X.permute(0, 2, 1, 3).contiguous()
+
+			# shape [bs, M, hidden_size]
+			Y_attends_in_X = Y_attends_in_X.view(Y_attends_in_X.size(0), Y_attends_in_X.size(1), -1)
+			return X_attends_in_Y, Y_attends_in_X
+		else:
+			# (1) shape [bs, mem_size + M, mem_size + N]
+			attn_X_guided_by_Y = torch.mean(attn_X_guided_by_Y, dim=1)
+			# (2) shape [bs, mem_size + M, mem_size + N]
+			attn_Y_guided_by_X = torch.mean(attn_Y_guided_by_X, dim=1)
+
+			if self.config['model'].get('debug') is not None and self.config['model'].get('debug'):
+				self.attn_X_guided_by_Y = attn_X_guided_by_Y
+				self.attn_Y_guided_by_X = attn_Y_guided_by_X
+
+			# (1) shape: [bs, mem_size + N, hidden_size]
+			# (2) shape: [bs, mem_size + M, hidden_size]
+			X_attends_in_Y = torch.matmul(attn_X_guided_by_Y.transpose(1, 2), X_mem)
+			Y_attends_in_X = torch.matmul(attn_Y_guided_by_X, Y_mem)
+
+			X_attends_in_Y = X_attends_in_Y[:, self.memory_size:, :]
+			Y_attends_in_X = Y_attends_in_X[:, self.memory_size:, :]
+			return X_attends_in_Y, Y_attends_in_X
 
 
 class CrossAttentionLayer(nn.Module):
@@ -121,6 +152,10 @@ class CrossAttentionLayer(nn.Module):
 		dropout = config['model']['dropout']
 
 		self.attns = clones(MultiHeadAttention(config), 3)
+
+		if check_flag(self.config['model'], 'ca_has_intra_attns'):
+			self.intra_attns = clones(MultiHeadAttention(config), 3)
+
 		self.im_mlp = NormalSubLayer(hidden_size, dropout)
 		self.qe_mlp = NormalSubLayer(hidden_size, dropout)
 
@@ -128,10 +163,10 @@ class CrossAttentionLayer(nn.Module):
 			self.hi_mlp = NormalSubLayer(hidden_size, dropout)
 
 		if self.config['model']['ca_has_layer_norm']:
-			self.im_norm = LayerNorm(hidden_size)
-			self.qe_norm = LayerNorm(hidden_size)
+			self.im_norm = nn.LayerNorm(hidden_size)
+			self.qe_norm = nn.LayerNorm(hidden_size)
 			if self.config['model']['ca_has_updated_hist']:
-				self.hi_norm = LayerNorm(hidden_size)
+				self.hi_norm = nn.LayerNorm(hidden_size)
 
 	def forward(self, triples):
 		"""
@@ -140,16 +175,28 @@ class CrossAttentionLayer(nn.Module):
 		im [batch_size, M, hidden_size]
 		"""
 		im, qe, hi, mask_im, mask_qe, mask_hi = triples
+
 		im_in_qe, qe_in_im = self.attns[0](im, qe, mask_im, mask_qe)
 		im_in_hi, hi_in_im = self.attns[1](im, hi, mask_im, mask_hi)
 		qe_in_hi, hi_in_qe = self.attns[2](qe, hi, mask_qe, mask_hi)
 
-		a_im = self.im_mlp(torch.cat([im, qe_in_im, hi_in_im], dim=-1))
-		a_qe = self.qe_mlp(torch.cat([qe, hi_in_qe, im_in_qe], dim=-1))
+		if check_flag(self.config['model'], 'ca_has_intra_attns'):
+			im_in_im, _ = self.intra_attns[0](im, im, mask_im, mask_im)
+			hi_in_hi, _ = self.intra_attns[1](hi, hi, mask_hi, mask_hi)
+			qe_in_qe, _ = self.intra_attns[2](qe, qe, mask_qe, mask_qe)
 
-		# The best one doesn't need this
-		if self.config['model']['ca_has_updated_hist']:
-			a_hi = self.hi_mlp(torch.cat([hi, qe_in_hi, im_in_hi], dim=-1))
+			a_im = self.im_mlp(torch.cat([im_in_im, qe_in_im, hi_in_im], dim=-1))
+			a_qe = self.qe_mlp(torch.cat([qe_in_qe, hi_in_qe, im_in_qe], dim=-1))
+
+			if self.config['model']['ca_has_updated_hist']:
+				a_hi = self.hi_mlp(torch.cat([hi_in_hi, qe_in_hi, im_in_hi], dim=-1))
+		else:
+			a_im = self.im_mlp(torch.cat([im, qe_in_im, hi_in_im], dim=-1))
+			a_qe = self.qe_mlp(torch.cat([qe, hi_in_qe, im_in_qe], dim=-1))
+
+			# The best one doesn't need this
+			if self.config['model']['ca_has_updated_hist']:
+				a_hi = self.hi_mlp(torch.cat([hi, qe_in_hi, im_in_hi], dim=-1))
 
 		if self.config['model']['ca_has_residual']:
 			im = im + a_im

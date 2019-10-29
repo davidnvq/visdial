@@ -18,7 +18,7 @@ class ImageEncoder(nn.Module):
         self.config = config
 
         self.img_linear = nn.Sequential(
-            LayerNorm(config['model']['img_feat_size']),
+            # LayerNorm(config['model']['img_feat_size']),
             nn.Linear(config['model']['img_feat_size'],
                       config['model']['hidden_size']),
             nn.ReLU(inplace=True),
@@ -67,11 +67,11 @@ class ImageEncoder(nn.Module):
                 LayerNorm(config['model']['hidden_size'])
             )
 
-    def forward(self, batch):
+    def forward(self, batch, test_mode=False):
         bs, num_hist, _ = batch['ques_tokens'].size()
         hidden_size = self.config['model']['hidden_size']
 
-        if self.config['model']['test_mode']:
+        if self.config['model']['test_mode'] or test_mode:
             num_hist = 1
 
         # shape: [batch_size, num_proposals, img_feat_size]

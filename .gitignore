@@ -42,4 +42,3 @@ logs/
 
 # IPython Notebook
 .ipynb_checkpoints
-*ipynb

@@ -58,6 +58,8 @@ class DialogsReader(object):
 		self.config = config
 
 		path_json_dialogs = config['dataset'][f"{split}_json_dialog_path"]
+		path_json_dialogs = os.path.expanduser(path_json_dialogs)
+
 
 		with open(path_json_dialogs, "r") as visdial_file:
 			visdial_data = json.load(visdial_file)
@@ -340,20 +342,6 @@ def test_question_feature_reader():
 
 class ImageFeaturesHdfReader:
 	"""
-	A reader for HDF files containing pre-extracted image features. A typical
-	HDF file is expected to have a column named "image_id", and another column
-	named "features".
-
-	Example of an HDF file:
-	```
-	visdial_train_faster_rcnn_bottomup_features.h5
-	   |--- "image_id" [shape: (num_images, )]
-	   |--- "features" [shape: (num_images, num_proposals, feature_size)]
-	   +--- .attrs ("split", "train")
-	```
-	Refer ``$PROJECT_ROOT/data/extract_bottomup.py`` script for more details
-	about HDF structure.
-
 	Parameters
 	----------
 	features_hdfpath : str
@@ -378,11 +366,12 @@ class ImageFeaturesHdfReader:
 
 	def __init__(self,
 				 hdf_path,
-				 genome_path='/media/local_workspace/quang/datasets/visdial/genome/1600-400-20'):
+				 # genome_path='/home/administrator/quang/datasets/visdial/genome/1600-400-20'):
+				 genome_path='~/datasets/genome/1600-400-20'):
 
 		self.hdf_path = hdf_path
+		genome_path = os.path.expanduser(genome_path)
 		self.genome_path = genome_path
-
 		with h5py.File(self.hdf_path, "r") as hdf:
 			self._split = hdf.attrs["split"]
 			self.image_id_list = list(hdf["image_id"])

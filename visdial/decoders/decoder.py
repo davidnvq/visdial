@@ -1,15 +1,27 @@
 import torch
 import torch.nn as nn
-
-import logging
-
-try:
-    from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
-except (ImportError, AttributeError) as e:
-    logging.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
-    LayerNorm = torch.nn.LayerNorm
-
 from visdial.common.dynamic_rnn import DynamicRNN
+
+
+class MiscDecoder(nn.Module):
+
+    def __init__(self, disc_decoder, gen_decoder):
+        super(MiscDecoder, self).__init__()
+        self.disc_decoder = disc_decoder
+        self.gen_decoder = gen_decoder
+
+    def forward(self, batch, encoder_output, test_mode=False):
+        output = {}
+        if self.disc_decoder is not None:
+            output['opt_scores'] = self.disc_decoder(batch, encoder_output, test_mode=test_mode)['opt_scores']
+
+        if self.gen_decoder is not None:
+            if self.training:
+                output['ans_out_scores'] = self.gen_decoder(batch, encoder_output, test_mode=test_mode)['ans_out_scores']
+            else:
+                output['opts_out_scores'] = self.gen_decoder(batch, encoder_output, test_mode=test_mode)['opts_out_scores']
+
+        return output
 
 
 class DiscriminativeDecoder(nn.Module):
@@ -32,20 +44,16 @@ class DiscriminativeDecoder(nn.Module):
         )
 
         if config['model']['txt_has_decoder_layer_norm']:
-            self.layer_norm1 = LayerNorm(config['model']['hidden_size'] * 2)
-            self.layer_norm2 = LayerNorm(config['model']['hidden_size'])
+            self.layer_norm2 = nn.LayerNorm(config['model']['hidden_size'])
 
 
         self.option_linear = nn.Linear(config['model']['hidden_size'] * 2,
                                        config['model']['hidden_size'])
 
-        # nn.init.kaiming_uniform_(self.option_linear.weight)
-        # nn.init.constant_(self.option_linear.bias, 0)
-
         # Options are variable length padded sequences, use DynamicRNN.
         self.opt_lstm = DynamicRNN(self.opt_lstm)
 
-    def forward(self, batch, encoder_output):
+    def forward(self, batch, encoder_output, test_mode=False):
         """Given `encoder_output` + candidate option sequences, predict a score
         for each option sequence.
         Parameters
@@ -97,9 +105,8 @@ class DiscriminativeDecoder(nn.Module):
         # shape: [BS x NR x NO, HS x 2]
         nonzero_options_embed = torch.cat([nonzero_options_embed[0], nonzero_options_embed[1]], dim=-1)
 
-        if self.config['model']['txt_has_decoder_layer_norm']:
-            nonzero_options_embed = self.layer_norm1(nonzero_options_embed)
-
+        # if self.config['model']['txt_has_decoder_layer_norm']:
+        #     nonzero_options_embed = self.layer_norm1(nonzero_options_embed)
 
         # shape: [BS x NR x NO, HS]
         nonzero_options_embed = self.option_linear(nonzero_options_embed)
@@ -113,15 +120,40 @@ class DiscriminativeDecoder(nn.Module):
         # shape: [BS x NR x NO, HS]
         options_embed[nonzero_options_length_indices] = nonzero_options_embed
 
-        # TODONE: these lines are the same
-        # shape: [BS, NR, SEQ] -> [BS, NR, SEQ, 1]
-        encoder_output = encoder_output.unsqueeze(-1)
+        if self.config['model']['pred_heads'] > 1:
+            # shape [bs, nr, num_heads, d_h]
+            num_heads = self.config['model']['pred_heads']
+            d_h = int(encoder_output.size(-1) / num_heads)
 
-        # shape: [BS, NR, NO, SEQ]
-        options_embed = options_embed.view(BS, NR, NO, -1)
+            # shape [bs, nr, num_heads, d_h, 1]
+            encoder_output = encoder_output.view(BS, NR, num_heads, d_h, 1).contiguous()
 
-        # shape: [BS, NR, NO, 1]
-        scores = torch.matmul(options_embed, encoder_output)
+            # shape: [BS, NR, NO, num_heads, d_h]
+            options_embed = options_embed.view(BS, NR, NO, num_heads, d_h).contiguous()
+
+            # shape: [BS, NR, num_heads, NO, d_h]
+            options_embed = options_embed.permute(0, 1, 3, 2, 4).contiguous()
+
+            # shape [bs, nr, num_heads, no,  1]
+            scores = torch.matmul(options_embed, encoder_output)
+
+            # shape [bs, nr, num_heads, no]
+            scores = scores.squeeze(-1)
+
+            # shape [bs, nr, no, num_heads]
+            scores = scores.permute(0, 1, 3, 2).contiguous()
+
+            # shape [bs, nr, no, 1]
+            scores = torch.mean(scores, dim=-1)
+        else:
+            # TODONE: these lines are the same
+            # shape: [BS, NR, HS] -> [BS, NR, HS, 1]
+            encoder_output = encoder_output.unsqueeze(-1)
+            # shape: [BS, NR, NO, HS]
+            options_embed = options_embed.view(BS, NR, NO, -1)
+
+            # shape: [BS, NR, NO, 1]
+            scores = torch.matmul(options_embed, encoder_output)
 
         # shape: [BS, NR, NO]
         scores = scores.squeeze(-1)
@@ -130,27 +162,6 @@ class DiscriminativeDecoder(nn.Module):
             scores = scores[:, batch['num_rounds'] - 1]
 
         return {'opt_scores': scores}
-
-
-class MiscDecoder(nn.Module):
-
-    def __init__(self, disc_decoder, gen_decoder):
-        super(MiscDecoder, self).__init__()
-        self.disc_decoder = disc_decoder
-        self.gen_decoder = gen_decoder
-
-    def forward(self, batch, encoder_output):
-        output = {}
-        if self.disc_decoder is not None:
-            output['opt_scores'] = self.disc_decoder(batch, encoder_output)['opt_scores']
-
-        if self.gen_decoder is not None:
-            if self.training:
-                output['ans_out_scores'] = self.gen_decoder(batch, encoder_output)['ans_out_scores']
-            else:
-                output['opts_out_scores'] = self.gen_decoder(batch, encoder_output)['opts_out_scores']
-
-        return output
 
 
 class GenerativeDecoder(nn.Module):
@@ -171,7 +182,7 @@ class GenerativeDecoder(nn.Module):
         )
 
         if config['model']['txt_has_decoder_layer_norm']:
-            self.layer_norm = LayerNorm(config['model']['hidden_size'])
+            self.layer_norm = nn.LayerNorm(config['model']['hidden_size'])
 
         self.lstm_to_words = nn.Linear(
             config['model']['hidden_size'], config['model']['txt_vocab_size']
@@ -181,7 +192,7 @@ class GenerativeDecoder(nn.Module):
         self.logsoftmax = nn.LogSoftmax(dim=-1)
 
 
-    def forward(self, batch, encoder_output):
+    def forward(self, batch, encoder_output, test_mode=False):
         """Given `encoder_output`, learn to autoregressively predict
         ground-truth answer word-by-word during training.
         During evaluation, assign log-likelihood scores to all answer options.
@@ -223,7 +234,7 @@ class GenerativeDecoder(nn.Module):
             opts_in = batch["opts_in"]
             target_opts_out = batch["opts_out"]
 
-            if self.test_mode:
+            if self.test_mode or test_mode:
                 # shape: [BS, NH, NO, SEQ]
                 opts_in = opts_in[:, batch['num_rounds'] - 1]
                 # shape: [BS x NH x NO, SEQ]

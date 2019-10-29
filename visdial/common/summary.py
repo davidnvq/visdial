@@ -9,7 +9,7 @@ class SummaryAttention(nn.Module):
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(inplace=True),
             # I added this layernorm
-            nn.LayerNorm(hidden_size),
+            # nn.LayerNorm(hidden_size),
             nn.Linear(hidden_size, 1)
         )
         self.attn_weights = None

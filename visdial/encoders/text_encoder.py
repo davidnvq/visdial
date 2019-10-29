@@ -23,7 +23,7 @@ class TextEncoder(nn.Module):
         self.hist_encoder = hist_encoder
         self.ques_encoder = ques_encoder
 
-    def forward(self, batch):
+    def forward(self, batch, test_mode=False):
         # ques_tokens: shape [bs, num_hist, max_seq_len]
         # hist_tokens: shape [bs, num_hist, num_rounds, max_seq_len]
         ques_tokens = batch['ques_tokens']
@@ -43,9 +43,8 @@ class TextEncoder(nn.Module):
         # hist: shape [bs * num_hist, num_rounds, hidden_size]
         # ques_mask: shape [bs * num_hist, max_seq_len]
         # hist_mask: shape [bs * num_hist, num_rounds]
-        ques, ques_mask = self.ques_encoder(ques, ques_len)
-        hist, hist_mask = self.hist_encoder(hist, hist_len)
-
+        ques, ques_mask = self.ques_encoder(ques, ques_len, test_mode=test_mode)
+        hist, hist_mask = self.hist_encoder(hist, hist_len, test_mode=test_mode)
         return hist, ques, hist_mask, ques_mask
 
 
@@ -54,8 +53,18 @@ class QuesEncoder(nn.Module):
     def __init__(self, config):
         super(QuesEncoder, self).__init__()
 
-        self.ques_linear = nn.Linear(config['model']['hidden_size'] * 2,
-                                     config['model']['hidden_size'])
+
+        self.config = config
+        if self.config['model'].get('txt_has_nsl') is not None and self.config['model'].get('txt_has_nsl'):
+            self.ques_linear = nn.Sequential(
+                            nn.Linear(config['model']['hidden_size'] * 2,
+                                      config['model']['hidden_size']),
+                            nn.ReLU(inplace=True),
+                            nn.Dropout(p=config['model']['dropout']),
+                            LayerNorm(config['model']['hidden_size']))
+        else:
+            self.ques_linear = nn.Linear(config['model']['hidden_size'] * 2,
+                                         config['model']['hidden_size'])
 
         self.ques_lstm = DynamicRNN(nn.LSTM(config['model']['txt_embedding_size'],
                                             config['model']['hidden_size'],
@@ -72,7 +81,7 @@ class QuesEncoder(nn.Module):
 
         self.config = config
 
-    def forward(self, ques, ques_len):
+    def forward(self, ques, ques_len, test_mode=False):
         """
         :param ques:        shape [bs, num_hist, max_seq_len, embedding_size]
         :param ques_len:    shape [bs, num_hist]
@@ -81,7 +90,7 @@ class QuesEncoder(nn.Module):
                ques_mask    shape [bs, num_hist, max_seq_len]
         """
         # for test only
-        if self.config['model']['test_mode']:
+        if self.config['model']['test_mode'] or test_mode:
             # get only the last question
             last_idx = (ques_len > 0).sum()
             ques = ques[:, last_idx - 1:last_idx]
@@ -117,7 +126,7 @@ class QuesEncoder(nn.Module):
                 # [BS x NH, SEQ, HS]
                 ques = self.ques_linear(ques)
                 if self.config['model']['txt_has_pos_embedding']:
-                    ques += ques + self.pos_embedding(ques)
+                    ques = ques + self.pos_embedding(ques)
 
                 if self.config['model']['txt_has_layer_norm']:
                     ques = self.layer_norm(ques)
@@ -129,9 +138,18 @@ class HistEncoder(nn.Module):
 
     def __init__(self, config):
         super(HistEncoder, self).__init__()
+        self.config = config
 
-        self.hist_linear = nn.Linear(config['model']['hidden_size'] * 2,
-                                     config['model']['hidden_size'])
+        if self.config['model'].get('txt_has_nsl') is not None and self.config['model'].get('txt_has_nsl'):
+            self.hist_linear = nn.Sequential(
+                            nn.Linear(config['model']['hidden_size'] * 2,
+                                      config['model']['hidden_size']),
+                            nn.ReLU(inplace=True),
+                            nn.Dropout(p=config['model']['dropout']),
+                            LayerNorm(config['model']['hidden_size']))
+        else:
+            self.hist_linear = nn.Linear(config['model']['hidden_size'] * 2,
+                                         config['model']['hidden_size'])
 
         self.hist_lstm = DynamicRNN(nn.LSTM(config['model']['txt_embedding_size'],
                                             config['model']['hidden_size'],
@@ -149,7 +167,7 @@ class HistEncoder(nn.Module):
         self.config = config
         self.hidden_size = self.config['model']['hidden_size']
 
-    def forward(self, hist, hist_len):
+    def forward(self, hist, hist_len, test_mode=False):
         bs, num_rounds, max_seq_len, embedding_size = hist.size()
 
         # shape [bs * num_rounds, max_seq_len, hidden_size]
@@ -162,7 +180,7 @@ class HistEncoder(nn.Module):
         # shape [bs * num_rounds]
         hist_len = hist_len.view(bs * num_rounds)
 
-        if self.config['model']['test_mode']:
+        if self.config['model']['test_mode'] or test_mode:
             num_hist = 1
             round_mask = torch.ones(bs, num_hist, num_rounds, 1, device=hist.device)
             hist_mask = torch.ones(bs * num_hist, num_rounds, device=hist.device)

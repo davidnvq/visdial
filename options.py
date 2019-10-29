@@ -1,51 +1,17 @@
-from comet_ml import Experiment, OfflineExperiment
-
 import os
 import yaml
 import argparse
 osp = os.path.join
 
-HOME_PATH = '/media/local_workspace/quang'
-DATA_PATH = f'{HOME_PATH}/datasets/visdial'
-LOG_PATH = '/home/quang/workspace/log/tensorboard'
+HOME_PATH = os.path.expanduser('~')
+DATA_PATH = osp(HOME_PATH, 'datasets')
 
 os.system(f"mkdir -p {HOME_PATH}")
 os.system(f"mkdir -p {DATA_PATH}")
-os.system(f"mkdir -p {LOG_PATH}")
-
-def get_comet_experiment(config):
-    print("GET COMET!")
-    if config['callbacks']['online']:
-        experiment = Experiment(api_key='2z9VHjswAJWF1TV6x4WcFMVss',
-                                project_name='temp',
-                                workspace='lightcv')
-    else:
-        experiment = OfflineExperiment(
-            project_name='temp',
-            workspace='lightcv',
-            offline_directory=config['callbacks']['log_dir'])
-    # Log project to comet
-    print("LOG PROJECT!")
-    config_name = config['config_name'].replace('/', '_')
-    os.system(f"zip -qr {config_name}.zip /home/quang/workspace/repos/visdial -x '*.git*' '*.ipynb_checkpoints*' '*.idea*' '*__pycache__*'")
-    experiment.log_asset(f"{config_name}.zip")
-    os.system(f"mv {config_name}.zip {config['callbacks']['log_dir']}")
-
-    # Log parameters to comet
-    for key in config:
-        if not isinstance(config[key], dict):
-            experiment.log_parameter(key, config[key])
-
-    for key in ['model', 'solver']:
-        experiment.log_parameters(config[key])
-
-    return experiment
 
 def get_training_config_and_args():
     parser = get_training_parser()
-
     args = parser.parse_args()
-    # print([group.title for group in parser._action_groups])
 
     config = {}
     for group in parser._action_groups:
@@ -58,32 +24,50 @@ def get_training_config_and_args():
             group_dict = {arg.dest:getattr(args, arg.dest, None) for arg in group._group_actions}
         config[group.title] = group_dict
 
-    config['callbacks']['log_dir'] = osp(LOG_PATH, args.config_name)
-    config['callbacks']['save_dir'] = osp(HOME_PATH, 'checkpoints/visdial/CVPR', args.config_name)
+    config['callbacks']['save_dir'] = osp(HOME_PATH, 'checkpoints', args.config_name)
+    config['callbacks']['log_dir'] = osp(HOME_PATH, 'checkpoints', args.config_name, "tensorboard")
 
     print("LOG CONFIGURATION!")
     for dir in [config['callbacks']['log_dir'], config['callbacks']['save_dir']]:
-
-        # os.system(f"rm -r {dir}")
-
         if not os.path.exists(dir):
             os.system(f"mkdir -p {dir}")
 
         config_name = args.config_name.replace('/', '_')
         with open(f'{dir}/{config_name}.yml', 'w') as file:
             yaml.dump(config, file, default_flow_style=False, indent=4)
-
-
     print(yaml.dump(config, default_flow_style=False, indent=4))
 
-    dir = '/home/quang/workspace/repos/visdial/configs'
-    if not os.path.exists(dir):
-        os.system(f'mkdir -p {dir}')
+    project_path = os.path.dirname(os.path.abspath(__file__))
 
-    with open(f'{dir}/{config_name}.yml', 'w') as file:
-        yaml.dump(config, file, default_flow_style=False, indent=4)
+    # Copy project to checkpoint
+    cmd = 'rsync -av {} {}'.format(project_path, osp(config['callbacks']['save_dir'], 'code'))
+    os.system(cmd)
 
-    return config, args
+    hparams = {
+    'config_name' : args.config_name,
+    'ca_has_layer_norm' : args.ca_has_layer_norm,
+    'ca_has_proj_linear': args.ca_has_proj_linear,
+    'ca_has_residual': args.ca_has_residual,
+    'ca_has_shared_attns': args.ca_has_shared_attns,
+    'ca_has_updated_hist': args.ca_has_updated_hist,
+    'ca_memory_size': args.ca_memory_size,
+    'ca_num_cross_attn_heads': args.ca_num_cross_attn_heads,
+    'ca_num_cross_attns': args.ca_num_cross_attns,
+    'img_has_attributes': args.img_has_attributes,
+    'img_has_bboxes': args.img_has_bboxes,
+    'img_has_classes': args.img_has_classes,
+    'img_num_objects' : "_".join(args.val_feat_img_path.split('_')[-2:]),
+    'txt_has_layer_norm': args.txt_has_layer_norm,
+    'txt_has_pos_embedding': args.txt_has_pos_embedding,
+    'ls_epsilon' : args.ls_epsilon,
+    'kd_alpha': args.kd_alpha,
+    'scheduler_type' : args.scheduler_type,
+    'init_lr' : args.init_lr,
+    'pred_sigmoid' : args.pred_sigmoid,
+    'pred_heads' : args.pred_heads
+    }
+
+    return config, args, hparams
 
 
 def get_training_parser():
@@ -101,6 +85,7 @@ def get_parser(desc):
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--seed', metavar='N', type=int,
                         default=0)
+    parser.add_argument('--no_comet', action='store_true', default=False)
     return parser
 
 
@@ -182,7 +167,7 @@ def add_solver_args(parser):
     """Learning Rate Scheduler"""
     group.add_argument('--scheduler_type', default='CosineLR',
                        help='learning rate scheduler type',
-                       choices=['CosineLR', 'LinearLR'])
+                       choices=['CosineLR', 'LinearLR', "CosineStepLR"])
     group.add_argument('--init_lr', default=5e-3, type=float,
                        help='initial learning rate')
     group.add_argument('--min_lr', default=1e-5, type=float, metavar='LR',
@@ -198,9 +183,9 @@ def add_solver_args(parser):
     group.add_argument('--warmup_epochs', default=1, type=int, metavar='N')
 
     """Linear Scheduler"""
-    group.add_argument('--linear_gama', default=None, type=float, metavar='LG',
+    group.add_argument('--linear_gama', default=0.5, type=float, metavar='LG',
                        help='learning rate shrink factor for step reduce, lr_new = (lr * lr_gama) at milestone step')
-    group.add_argument('--milestone_steps', nargs='+', type=int, metavar='LS', default=None,
+    group.add_argument('--milestone_steps', nargs='+', type=int, metavar='LS', default=[3, 6, 8, 10, 11],
                         help='If we use step_lr_scheduler rather than cosine')
     group.add_argument('--fp16', default=False, action='store_true')
     return group
@@ -220,6 +205,7 @@ def add_model_args(parser):
     group = parser.add_argument_group('model')
 
     group.add_argument('--decoder_type', choices=['misc', 'disc', 'gen'], default='misc', help='Type of decoder')
+    group.add_argument('--encoder_out', type=str, nargs='+', default=['img', 'ques'],)
     group.add_argument('--hidden_size', type=int, metavar='N', default=512)
     group.add_argument('--dropout', type=float, metavar='N', default=0.1)
     group.add_argument('--test_mode', action='store_true', default=False)
@@ -238,6 +224,7 @@ def add_model_args(parser):
     group.add_argument('--txt_embedding_size', type=int, default=300)
     group.add_argument('--txt_has_pos_embedding', action='store_true', default=False)
     group.add_argument('--txt_has_layer_norm', action='store_true', default=False)
+    group.add_argument('--txt_has_nsl', action='store_true', default=False)
     group.add_argument('--txt_has_decoder_layer_norm', action='store_true', default=False)
 
     """Cross-Attention"""
@@ -249,4 +236,13 @@ def add_model_args(parser):
     group.add_argument('--ca_num_cross_attns', type=int, metavar='N', default=1)
     group.add_argument('--ca_num_cross_attn_heads', type=int, metavar='N', default=4)
     group.add_argument('--ca_memory_size', type=int, default=2)
+    group.add_argument('--ca_every_head_attn', action='store_true', default=False)
+    group.add_argument('--ca_has_intra_attns', action='store_true', default=False)
+
+
+
+
+    """Output"""
+    group.add_argument('--pred_sigmoid', action='store_true', default=False)
+    group.add_argument('--pred_heads', type=int, metavar='N', default=1)
     return group

@@ -2,7 +2,6 @@ from typing import List
 import os
 
 import torch
-from torch.nn.functional import normalize
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 # from pytorch_pretrained_bert import BertTokenizer
@@ -37,8 +36,8 @@ class VisDialDataset(Dataset):
 		self.image_ids = list(self.dialogs_reader.dialogs.keys())
 
 		if config['dataset']['overfit']:
-			self.image_ids = self.image_ids[:config['solver']['num_samples']]
-		if config['dataset']['finetune']:
+			self.image_ids = self.image_ids[:64]
+		if config['dataset']['finetune'] and split != 'test':
 			self.image_ids = self.dense_ann_feat_reader._image_ids
 
 	def __len__(self):
@@ -83,15 +82,19 @@ class VisDialDataset(Dataset):
 
 	def _get_dense_ann_feat_reader(self, config, split):
 		path = config['dataset'].get(f'{split}_json_dense_dialog_path', None)
-		return DenseAnnotationsReader(path) if path is not None else None
+
+		return DenseAnnotationsReader(os.path.expanduser(path)) if path is not None else None
 
 	def _get_img_feat_reader(self, config, split):
 		path = config['dataset'][f'{split}_feat_img_path']
+		path = os.path.expanduser(path)
+
 		genome_path = config['dataset'].get('genome_path', None)
+		print('genome_path', genome_path)
 		if genome_path is None:
 			hdf_reader = ImageFeaturesHdfReader(path)
 		else:
-			hdf_reader = ImageFeaturesHdfReader(path, genome_path=genome_path)
+			hdf_reader = ImageFeaturesHdfReader(path, genome_path=os.path.expanduser(genome_path))
 		return hdf_reader
 
 	def _get_tokenizer(self, config):
@@ -100,6 +103,7 @@ class VisDialDataset(Dataset):
 			# return BertTokenizer.from_pretrained("bert-base-uncased", do_lower_case=True)
 		else:
 			path = config['dataset']['train_json_word_count_path']
+			path = os.path.expanduser(path)
 			return Vocabulary(word_counts_path=path)
 
 
