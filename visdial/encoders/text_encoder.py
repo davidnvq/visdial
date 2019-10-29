@@ -160,88 +160,114 @@ class HistEncoder(nn.Module):
     def forward(self, hist, hist_len, test_mode=False):
         bs, num_rounds, max_seq_len, embedding_size = hist.size()
 
-        # shape [bs * num_rounds, max_seq_len, hidden_size]
-        hist = hist.view(bs * num_rounds, max_seq_len, embedding_size)
+        if self.config['dataset']['concat_hist']:
+            # for test only
 
-        # # shape [bs * num_hist * num_rounds, max_seq_len]
-        # hist_mask = torch.arange(max_seq_len, device=hist.device).repeat(bs * num_hist * num_rounds, 1)
-        # hist_mask = hist_mask < hist_len.unsqueeze(-1)
+            bs, num_hist, max_seq_len, embedding_size = hist.size()
 
-        # shape [bs * num_rounds]
-        hist_len = hist_len.view(bs * num_rounds)
+            # shape [bs * num_hist, max_seq_len, hidden_size]
+            hist = hist.view(bs * num_hist, max_seq_len, embedding_size)
 
-        if self.config['model']['test_mode'] or test_mode:
-            num_hist = 1
-            round_mask = torch.ones(bs, num_hist, num_rounds, 1, device=hist.device)
-            hist_mask = torch.ones(bs * num_hist, num_rounds, device=hist.device)
-        else:
-            num_hist = 10
-            # shape [10, 10]
-            MASK = torch.tensor([
-                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-                [1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-                [1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-                [1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
-                [1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
-                [1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-                [1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
-                [1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
-                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            ], device=hist.device)
+            # shape [bs * num_hist]
+            hist_len = hist_len.view(bs * num_hist)
 
-            # shape [bs, num_hist, num_rounds, 1]
-            round_mask = MASK[None, :, :, None].repeat(bs, 1, 1, 1)
+            # shape [bs * num_hist, max_seq_len]
+            hist_mask = torch.arange(max_seq_len, device=hist.device).repeat(bs * num_hist, 1)
+            hist_mask = hist_mask < hist_len.unsqueeze(-1)
 
-            hist_mask = MASK[None, :, :].repeat(bs, 1, 1).view(bs * num_hist, num_rounds)
+            if isinstance(self.hist_lstm, DynamicRNN):
+                # [BS x NH, SEQ, HS x 2]
+                hist, (_, _) = self.hist_lstm(hist, hist_len)
 
-        if isinstance(self.hist_lstm, DynamicRNN):
-
-            if not self.hist_lstm.bidirectional:  # LSTM
-                # shape: [num_layers, BS, HS] if Not bidirectional
-                # shape: hn = [num_layers, bs * num_rounds, hidden_size]
-                y, (hn, cn) = self.hist_lstm(hist, hist_len)
-
-                # shape: [bs * num_rounds, hidden_size]
-                hist = hn[-1]
-
-                # shape: [bs, num_rounds, hidden_size]
-                hist = hist.view(bs, num_rounds, self.hidden_size)
-
-            else:  # BiLSTM
-
-                # hn [num_layers x 2 (bidirectional), BS x NR, HS]
-                y, (hn, cn) = self.hist_lstm(hist, hist_len)
-
-                # ReDAN use y and softmax for each words to filtering the irrelevant words
-                # hist = attn * y (where attn = softmax(W1 * tanh (W2 * y))
-
-                # shape: [2, BS x NR, HS]
-                hn = hn[-2:]
-                # shape: [BS x NR, HS x 2]
-                hist = torch.cat([hn[0], hn[1]], dim=-1)
-
-                # shape: [BS x NR, HS]
-                hist = self.hist_linear(hist)
-
-                # shape [BS, NR, HS]
-                hist = hist.view(bs, num_rounds, self.hidden_size)
-
+                # [BS x NH, SEQ, HS]
+                hist = self.hist_mlp(hist)
                 if self.config['model']['txt_has_pos_embedding']:
                     hist = hist + self.pos_embedding(hist)
 
                 if self.config['model']['txt_has_layer_norm']:
                     hist = self.layer_norm(hist)
+                return (hist,  # shape: [bs * num_hist, max_seq_len, hidden_size]
+                        hist_mask.long(),  # shape [bs * num_hist, max_seq_len]
+                        )
+        else:
+            # shape [bs * num_rounds, max_seq_len, hidden_size]
+            hist = hist.view(bs * num_rounds, max_seq_len, embedding_size)
 
-            # shape: [bs, num_hist, num_rounds, hidden_size]
-            hist = hist[:, None, :, :].repeat(1, num_hist, 1, 1)
+            # shape [bs * num_rounds]
+            hist_len = hist_len.view(bs * num_rounds)
 
-            # shape: [bs, num_hist, num_rounds, hidden_size]
-            hist = hist.masked_fill(round_mask == 0, 0.0)
+            if self.config['model']['test_mode'] or test_mode:
+                num_hist = 1
+                round_mask = torch.ones(bs, num_hist, num_rounds, 1, device=hist.device)
+                hist_mask = torch.ones(bs * num_hist, num_rounds, device=hist.device)
+            else:
+                num_hist = 10
+                # shape [10, 10]
+                MASK = torch.tensor([
+                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+                    [1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                    [1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+                    [1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+                    [1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+                    [1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ], device=hist.device)
 
-            # shape: [bs * num_hist, num_rounds, hidden_size]
-            hist = hist.view(bs * num_hist, num_rounds, self.hidden_size)
+                # shape [bs, num_hist, num_rounds, 1]
+                round_mask = MASK[None, :, :, None].repeat(bs, 1, 1, 1)
 
-        return (hist,  # shape: [bs * num_hist, num_rounds, hidden_size]
-                hist_mask.long(),  # shape [bs * num_hist, num_rounds]
-                )
+                hist_mask = MASK[None, :, :].repeat(bs, 1, 1).view(bs * num_hist, num_rounds)
+
+            if isinstance(self.hist_lstm, DynamicRNN):
+
+                if not self.hist_lstm.bidirectional:  # LSTM
+                    # shape: [num_layers, BS, HS] if Not bidirectional
+                    # shape: hn = [num_layers, bs * num_rounds, hidden_size]
+                    y, (hn, cn) = self.hist_lstm(hist, hist_len)
+
+                    # shape: [bs * num_rounds, hidden_size]
+                    hist = hn[-1]
+
+                    # shape: [bs, num_rounds, hidden_size]
+                    hist = hist.view(bs, num_rounds, self.hidden_size)
+
+                else:  # BiLSTM
+
+                    # hn [num_layers x 2 (bidirectional), BS x NR, HS]
+                    y, (hn, cn) = self.hist_lstm(hist, hist_len)
+
+                    # ReDAN use y and softmax for each words to filtering the irrelevant words
+                    # hist = attn * y (where attn = softmax(W1 * tanh (W2 * y))
+
+                    # shape: [2, BS x NR, HS]
+                    hn = hn[-2:]
+                    # shape: [BS x NR, HS x 2]
+                    hist = torch.cat([hn[0], hn[1]], dim=-1)
+
+                    # shape: [BS x NR, HS]
+                    hist = self.hist_linear(hist)
+
+                    # shape [BS, NR, HS]
+                    hist = hist.view(bs, num_rounds, self.hidden_size)
+
+                    if self.config['model']['txt_has_pos_embedding']:
+                        hist = hist + self.pos_embedding(hist)
+
+                    if self.config['model']['txt_has_layer_norm']:
+                        hist = self.layer_norm(hist)
+
+                # shape: [bs, num_hist, num_rounds, hidden_size]
+                hist = hist[:, None, :, :].repeat(1, num_hist, 1, 1)
+
+                # shape: [bs, num_hist, num_rounds, hidden_size]
+                hist = hist.masked_fill(round_mask == 0, 0.0)
+
+                # shape: [bs * num_hist, num_rounds, hidden_size]
+                hist = hist.view(bs * num_hist, num_rounds, self.hidden_size)
+
+            return (hist,  # shape: [bs * num_hist, num_rounds, hidden_size]
+                    hist_mask.long(),  # shape [bs * num_hist, num_rounds]
+                    )
