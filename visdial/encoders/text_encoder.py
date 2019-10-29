@@ -1,16 +1,6 @@
 import torch
 import torch.nn as nn
-
-import logging
-
-try:
-    from apex.normalization.fused_layer_norm import FusedLayerNorm as LayerNorm
-except (ImportError, AttributeError) as e:
-    logging.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
-    LayerNorm = torch.nn.LayerNorm
-
-from visdial.common import PositionalEmbedding
-from visdial.common.dynamic_rnn import DynamicRNN
+from visdial.common import PositionalEmbedding, DynamicRNN, check_flag
 
 
 class TextEncoder(nn.Module):
@@ -53,15 +43,15 @@ class QuesEncoder(nn.Module):
     def __init__(self, config):
         super(QuesEncoder, self).__init__()
 
-
         self.config = config
-        if self.config['model'].get('txt_has_nsl') is not None and self.config['model'].get('txt_has_nsl'):
+
+        if check_flag(self.config['model'], 'txt_has_nsl'):
             self.ques_linear = nn.Sequential(
-                            nn.Linear(config['model']['hidden_size'] * 2,
-                                      config['model']['hidden_size']),
-                            nn.ReLU(inplace=True),
-                            nn.Dropout(p=config['model']['dropout']),
-                            LayerNorm(config['model']['hidden_size']))
+                nn.Linear(config['model']['hidden_size'] * 2,
+                          config['model']['hidden_size']),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=config['model']['dropout']),
+                nn.LayerNorm(config['model']['hidden_size']))
         else:
             self.ques_linear = nn.Linear(config['model']['hidden_size'] * 2,
                                          config['model']['hidden_size'])
@@ -73,7 +63,7 @@ class QuesEncoder(nn.Module):
                                             batch_first=True))
 
         if config['model']['txt_has_layer_norm']:
-            self.layer_norm = LayerNorm(config['model']['hidden_size'])
+            self.layer_norm = nn.LayerNorm(config['model']['hidden_size'])
 
         if config['model']['txt_has_pos_embedding']:
             self.pos_embedding = PositionalEmbedding(config['model']['hidden_size'],
@@ -140,13 +130,13 @@ class HistEncoder(nn.Module):
         super(HistEncoder, self).__init__()
         self.config = config
 
-        if self.config['model'].get('txt_has_nsl') is not None and self.config['model'].get('txt_has_nsl'):
+        if check_flag(self.config['model'], 'txt_has_nsl'):
             self.hist_linear = nn.Sequential(
-                            nn.Linear(config['model']['hidden_size'] * 2,
-                                      config['model']['hidden_size']),
-                            nn.ReLU(inplace=True),
-                            nn.Dropout(p=config['model']['dropout']),
-                            LayerNorm(config['model']['hidden_size']))
+                nn.Linear(config['model']['hidden_size'] * 2,
+                          config['model']['hidden_size']),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=config['model']['dropout']),
+                nn.LayerNorm(config['model']['hidden_size']))
         else:
             self.hist_linear = nn.Linear(config['model']['hidden_size'] * 2,
                                          config['model']['hidden_size'])
@@ -158,7 +148,7 @@ class HistEncoder(nn.Module):
                                             batch_first=True))
 
         if config['model']['txt_has_layer_norm']:
-            self.layer_norm = LayerNorm(config['model']['hidden_size'])
+            self.layer_norm = nn.LayerNorm(config['model']['hidden_size'])
 
         if config['model']['txt_has_pos_embedding']:
             self.pos_embedding = PositionalEmbedding(config['model']['hidden_size'],

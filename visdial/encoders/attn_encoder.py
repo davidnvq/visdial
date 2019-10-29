@@ -130,7 +130,7 @@ class MultiHeadAttention(nn.Module):
 			# (2) shape [bs, mem_size + M, mem_size + N]
 			attn_Y_guided_by_X = torch.mean(attn_Y_guided_by_X, dim=1)
 
-			if self.config['model'].get('debug') is not None and self.config['model'].get('debug'):
+			if check_flag(self.config['model'], 'debug'):
 				self.attn_X_guided_by_Y = attn_X_guided_by_Y
 				self.attn_Y_guided_by_X = attn_Y_guided_by_X
 
