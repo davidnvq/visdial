@@ -4,13 +4,11 @@ from visdial.common.utils import clones, check_flag
 
 
 class NormalSubLayer(nn.Module):
-
 	def __init__(self, hidden_size, dropout):
 		super(NormalSubLayer, self).__init__()
 		self.linear = nn.Sequential(nn.Linear(hidden_size * 3, hidden_size),
 		                            nn.ReLU(inplace=True),
 		                            nn.Dropout(p=dropout))
-
 	def forward(self, x):
 		"""x: shape [batch_size, M, hidden_size*3]"""
 		return self.linear(x)

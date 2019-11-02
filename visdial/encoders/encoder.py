@@ -8,11 +8,7 @@ except (ImportError, AttributeError) as e:
     logging.info("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex .")
     LayerNorm = torch.nn.LayerNorm
 
-
-
-from torch.nn import functional as F
 from visdial.common import clones, SummaryAttention, DynamicRNN
-
 
 class Encoder(nn.Module):
 
@@ -43,8 +39,6 @@ class Encoder(nn.Module):
             nn.Linear(hidden_size * num_feats, hidden_size),
             nn.ReLU(inplace=True),
             nn.Linear(hidden_size, hidden_size),
-            # I added this line Day 24/10 Friday!
-            nn.Dropout(p=self.config['model']['dropout']),
             LayerNorm(hidden_size))
 
     def forward(self, batch, test_mode=False):
