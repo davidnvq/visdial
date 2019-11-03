@@ -16,7 +16,6 @@ from visdial.data.dataset import VisDialDataset
 from visdial.metrics import SparseGTMetrics, NDCG
 from visdial.utils.checkpointing import CheckpointManager, load_checkpoint_from_config
 from visdial.utils import move_to_cuda
-from options import get_comet_experiment, get_training_config_and_args
 from torch.utils.tensorboard import SummaryWriter
 from visdial.optim import Adam, LRScheduler, get_weight_decay_params
 from visdial.loss import FinetuneLoss

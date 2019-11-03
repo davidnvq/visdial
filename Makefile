@@ -38,7 +38,7 @@ pullabc: clean
 	--exclude=*DS_Store \
 	--exclude=__pycache__ \
 	--exclude=*ipynb_checkpoints \
-	acb11402ci@abc:/home/acb11402ci/checkpoints /home/quang/checkpoints/abci
+	acb11402ci@abc:/groups1/gcb50277/quang/checkpoints/ /home/quang/checkpoints/abci
 
 yagi21: clean
 	rsync -av \
