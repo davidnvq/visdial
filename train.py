@@ -13,6 +13,8 @@ from visdial.data.dataset import VisDialDataset
 from visdial.metrics import SparseGTMetrics, NDCG
 from visdial.utils.checkpointing import CheckpointManager, load_checkpoint_from_config
 from visdial.utils import move_to_cuda
+from visdial.common.utils import check_flag
+
 from options import get_training_config_and_args
 try:
     no_summary_writer = False
@@ -59,6 +61,8 @@ print("Loading train dataset...")
 logging.info("Loading val dataset...")
 print("Loading val dataset...")
 val_dataset = VisDialDataset(config, split='val')
+if check_flag(config['dataset'], 'v0.9'):
+    val_dataset.dense_ann_feat_reader = None
 
 val_dataloader = DataLoader(val_dataset,
                             batch_size=2 * torch.cuda.device_count(),
@@ -69,11 +73,15 @@ if config['dataset']['overfit']:
     train_dataloader = val_dataloader
 else:
     train_dataset = VisDialDataset(config, split='train')
+    if check_flag(config['dataset'], 'v0.9'):
+        train_dataset.dense_ann_feat_reader = None
 
     train_dataloader = DataLoader(train_dataset,
                                   batch_size=config['solver']['batch_size'] * torch.cuda.device_count(),
                                   num_workers=config['solver']['cpu_workers'],
                                   shuffle=True)
+
+
 
 """MODEL INIT"""
 logging.info("Init model...")

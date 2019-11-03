@@ -97,6 +97,8 @@ def add_args(parser):
 
 def add_dataset_args(parser):
     group = parser.add_argument_group("dataset")
+    group.add_argument('--v0.9', action='store_true',
+                       default=False)
     group.add_argument('--overfit', action='store_true',
                        default=False,
                        help='overfit on small dataset')
