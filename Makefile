@@ -12,8 +12,20 @@ yagi22: clean
 	--exclude=*DS_Store \
 	--exclude=__pycache__ \
 	--exclude=*ipynb_checkpoints \
-	$(CUR_DIR) administrator@yagi22:/home/administrator/quang/workspace/repos
+	/home/quang/workspace/repos/visdial/ quang@yagi22:/home/quang/workspace/repos/visdial/
 
+yagi21: clean
+	rsync -av \
+	--exclude=.git \
+	--exclude=*pyc \
+	--exclude=*idea \
+	--exclude=*ignore \
+	--exclude=*.json \
+	--exclude=*.ipynb \
+	--exclude=*DS_Store \
+	--exclude=__pycache__ \
+	--exclude=*ipynb_checkpoints \
+	/home/quang/workspace/repos/visdial/ quang@yagi21:/home/quang/workspace/repos/visdial/
 
 abc: clean
 	rsync -av \
@@ -25,7 +37,7 @@ abc: clean
 	--exclude=*DS_Store \
 	--exclude=__pycache__ \
 	--exclude=*ipynb_checkpoints \
-	$(CUR_DIR) acb11402ci@abc:/home/acb11402ci/workspace/repos
+	/home/quang/workspace/repos/visdial/ acb11402ci@abc:/home/acb11402ci/workspace/repos/visdial/
 
 pullabc: clean
 	rsync -av \
@@ -38,19 +50,7 @@ pullabc: clean
 	--exclude=*DS_Store \
 	--exclude=__pycache__ \
 	--exclude=*ipynb_checkpoints \
-	acb11402ci@abc:/groups1/gcb50277/quang/checkpoints/ /home/quang/checkpoints/abci
-
-yagi21: clean
-	rsync -av \
-	--exclude=*pyc \
-	--exclude=*idea \
-	--exclude=*ignore \
-	--exclude=*.json \
-	--exclude=*.ipynb \
-	--exclude=*DS_Store \
-	--exclude=__pycache__ \
-	--exclude=*ipynb_checkpoints \
-	$(CUR_DIR) administrator@yagi21:/home/administrator/quang/workspace/repos
+	acb11402ci@abc:/groups1/gcb50277/quang/checkpoints/ /home/quang/checkpoints
 
 pull22: clean
 	rsync -av \

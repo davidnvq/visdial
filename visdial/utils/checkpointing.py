@@ -5,6 +5,7 @@ import os
 import torch
 from torch import nn, optim
 import yaml
+from visdial.utils import check_flag
 
 
 class CheckpointManager(object):
@@ -42,15 +43,15 @@ class CheckpointManager(object):
 			optimizer,
 			checkpoint_dirpath,
 			config={}
-			):
+	):
 
 		if not isinstance(model, nn.Module):
 			raise TypeError("{} is not a Module".format(type(model).__name__))
 
 		if not isinstance(optimizer, optim.Optimizer):
 			raise TypeError(
-					"{} is not an Optimizer".format(type(optimizer).__name__)
-					)
+				"{} is not an Optimizer".format(type(optimizer).__name__)
+			)
 
 		self.model = model
 		self.optimizer = optimizer
@@ -66,12 +67,15 @@ class CheckpointManager(object):
 		self.ckpt_dirpath.mkdir(parents=True, exist_ok=True)
 
 		import json
-		with open(self.ckpt_dirpath/'config.json', 'w') as f:
+		with open(self.ckpt_dirpath / 'config.json', 'w') as f:
 			json.dump(config, f)
-
 
 	def step(self, epoch=None, only_best=False, metrics=None, key=''):
 		"""Save checkpoint if step size conditions meet. """
+		if check_flag(self.model.encoder.config['dataset'], 'v0.9'):
+			self._save_state_dict(str(epoch), epoch, metrics)
+			return
+
 		if not only_best:
 			self._save_state_dict(str(epoch), epoch, metrics)
 
@@ -98,13 +102,12 @@ class CheckpointManager(object):
 
 		self._save_state_dict('last', epoch, metrics)
 
-
 	def _save_state_dict(self, name, epoch, metrics):
 		"""save state_dict"""
-		state_dict = {'model'    : self._model_state_dict(),
-		              'optimizer': self.optimizer.state_dict(),
-		              'epoch'    : epoch,
-		              'metrics'  : metrics}
+		state_dict = {'model': self._model_state_dict(),
+					  'optimizer': self.optimizer.state_dict(),
+					  'epoch': epoch,
+					  'metrics': metrics}
 		ckpt_path = self.ckpt_dirpath / f"checkpoint_{name}.pth"
 		torch.save(state_dict, ckpt_path)
 
@@ -141,8 +144,8 @@ def load_checkpoint(model, optimizer, checkpoint_pthpath=None, device='cuda', re
 		model.load_my_state_dict(components["model"])
 		return 0, model, optimizer
 
-def load_checkpoint_from_config(model, optimizer, config):
 
+def load_checkpoint_from_config(model, optimizer, config):
 	return load_checkpoint(model, optimizer,
 						   checkpoint_pthpath=config['callbacks']['path_pretrained_ckpt'],
 						   resume=config['callbacks']['resume'],

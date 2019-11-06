@@ -3,15 +3,16 @@
 #$ -l h_rt=72:00:00
 #$ -j y
 #$ -cwd
-#$ -o /home/acb11402ci/log/n50.txt
+#$ -o /home/acb11402ci/log/n58.txt
+
 source ~/.bashrc
 module load cuda/10.0/10.0.130.1
 python ~/workspace/repos/visdial/train.py \
---config_name n50 \
+--seed 3 \
+--config_name n58 \
 --decoder_type misc \
 --init_lr 0.001 \
 --scheduler_type "LinearLR" \
---v0.9 \
 --batch_size 8 \
 --num_epochs 15 \
 --num_samples 123287 \
@@ -20,16 +21,16 @@ python ~/workspace/repos/visdial/train.py \
 --encoder_out 'img' 'ques' \
 --dropout 0.1 \
 --img_has_bboxes \
+--img_has_classes \
+--img_has_attributes \
+--ca_num_cross_attns 2 \
 --ca_has_layer_norm \
 --ca_has_updated_hist \
---ca_num_cross_attns 2 \
---ca_every_head_attn \
 --ca_has_residual \
+--ca_has_shared_attns \
 --ca_has_intra_attns \
 --txt_has_layer_norm \
 --txt_has_decoder_layer_norm \
 --txt_has_pos_embedding \
---val_json_dialog_path "~/datasets/annotations/visdial_0.9_val.json" \
---train_json_dialog_path "~/datasets/annotations/visdial_0.9_train.json" \
---val_feat_img_path "~/datasets/bottom-up-attention/trainval_resnet101_faster_rcnn_genome__num_boxes_100_100.h5" \
+--val_feat_img_path "~/datasets/bottom-up-attention/val2018_resnet101_faster_rcnn_genome__num_boxes_100_100.h5" \
 --train_feat_img_path "~/datasets/bottom-up-attention/trainval_resnet101_faster_rcnn_genome__num_boxes_100_100.h5"

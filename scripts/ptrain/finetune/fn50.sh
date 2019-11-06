@@ -3,17 +3,18 @@
 #$ -l h_rt=72:00:00
 #$ -j y
 #$ -cwd
-#$ -o /home/acb11402ci/log/n50.txt
+#$ -o /home/acb11402ci/log/fn50.txt
 source ~/.bashrc
 module load cuda/10.0/10.0.130.1
 python ~/workspace/repos/visdial/train.py \
---config_name n50 \
+--config_name fn50 \
+--path_pretrained_ckpt /groups1/gcb50277/quang/checkpoints/n50/checkpoint_4.pth \
 --decoder_type misc \
---init_lr 0.001 \
+--init_lr 1e-6 \
 --scheduler_type "LinearLR" \
 --v0.9 \
 --batch_size 8 \
---num_epochs 15 \
+--num_epochs 1 \
 --num_samples 123287 \
 --ls_epsilon 0.0 \
 --milestone_steps 3 5 7 9 11 13 \
@@ -30,6 +31,6 @@ python ~/workspace/repos/visdial/train.py \
 --txt_has_decoder_layer_norm \
 --txt_has_pos_embedding \
 --val_json_dialog_path "~/datasets/annotations/visdial_0.9_val.json" \
---train_json_dialog_path "~/datasets/annotations/visdial_0.9_train.json" \
+--train_json_dialog_path "~/datasets/annotations/visdial_0.9_val.json" \
 --val_feat_img_path "~/datasets/bottom-up-attention/trainval_resnet101_faster_rcnn_genome__num_boxes_100_100.h5" \
 --train_feat_img_path "~/datasets/bottom-up-attention/trainval_resnet101_faster_rcnn_genome__num_boxes_100_100.h5"

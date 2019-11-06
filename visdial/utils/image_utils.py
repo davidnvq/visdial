@@ -40,14 +40,14 @@ def draw_boxes_with_scores(img, boxes, scores, topk=5, skip_indices=[]):
 	new_img = (img * 0.3).astype('uint8')
 
 	# sorting
-	ascending_indices = np.argsort(scores)
-	boxes = boxes[ascending_indices][-topk:]
-	scores = scores[ascending_indices][-topk:]
+	selection = np.argsort(scores)[-topk:]
+	alpha_scores = np.array([1.0, 0.5, 0.25, 0.125, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05])
 
-	for i, (box, score) in enumerate(zip(boxes, scores)):
+	for al_idx, i in enumerate(selection):
 		if i in skip_indices:
 			continue
-
+		score = alpha_scores[al_idx]
+		box = boxes[i]
 		# draw the region
 		alpha = score * 1.2 if score * 1.2 < 1.0 else 1.0
 		box = box.astype(int)
@@ -127,7 +127,6 @@ def draw_detections(image, boxes, scores, labels, color=(255, 0, 0), label_to_na
 	for i in selection:
 		c = color
 		draw_box(image, boxes[i, :], color=c)
-
 		# Draw labels and confidence scores
 		conf_score_text = '%.2f' % (scores[i])
 		label_text = label_to_name(labels[i]) if label_to_name else 'score'

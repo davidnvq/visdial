@@ -160,6 +160,8 @@ for p in [csv_file_path1, csv_file_path2, csv_file_path3]:
 for epoch in range(start_epoch, config['solver']['num_epochs']):
     logging.info(f"Training for epoch {epoch}:")
     print(f"Training for epoch {epoch}:")
+    if check_flag(config['dataset'], 'v0.9') and epoch > 6:
+        break
 
     epoch_loss = torch.tensor(0.0)
     for batch in tqdm(train_dataloader, total=iterations, unit="batch"):
