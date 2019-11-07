@@ -34,6 +34,7 @@ parser.add_argument('--num_epochs', type=int, default=10)
 parser.add_argument('--init_lr', type=float, default=5e-5)
 parser.add_argument('--scheduler_type', type=str, default='CosineLR')
 parser.add_argument('--batch_size', type=int, default=8)
+parser.add_argument('--overfit', action="store_true", default=False)
 
 args = parser.parse_args()
 if 'yml' in args.config:
@@ -41,6 +42,8 @@ if 'yml' in args.config:
 elif 'json' in args.config:
     with open(args.config) as file:
         config = json.load(file)
+
+config['dataset']['overfit'] = args.overfit
 
 config['dataset']['train_json_dense_dialog_path'] = '/media/local_workspace/quang/datasets/visdial/annotations/visdial_1.0_train_dense_sample.json'
 config['dataset']['finetune'] = True
@@ -155,6 +158,7 @@ disc_ndcg = NDCG()
 gen_ndcg = NDCG()
 
 if torch.cuda.device_count() > 1:
+    print("NUMBER OF CUDA", torch.cuda.device_count())
     model = nn.DataParallel(model)
 
 # =============================================================================
@@ -185,6 +189,9 @@ global_iteration_step = start_epoch * iterations
 
 for epoch in range(start_epoch, config['solver']['num_epochs']):
     logging.info(f"Training for epoch {epoch}:")
+
+    if epoch == 6:
+        break
 
     hparams['epoch'] = epoch
 
