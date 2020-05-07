@@ -7,6 +7,22 @@ Table of content
   * [Result of Checkpoints](#result-of-checkpoints)
   * [Acknowledgements](#acknowledgements)
 
+This is the code implementation for the paper titled: "**Efficient Attention Mechanism for Handling All the Interactions between Many Inputs with Application to Visual**".
+If you find this code useful or use our method as the baseline for comparison, please kindly cite the paper with the following bibtex or
+
+```
+@article{nguyen2019efficient,
+  title={Efficient Attention Mechanism for Handling All the Interactions between Many Inputs with Application to Visual Dialog},
+  author={Nguyen, Van-Quang and Suganuma, Masanori and Okatani, Takayuki},
+  journal={arXiv preprint arXiv:1911.11390},
+  year={2019}
+  
+or simply as:
+
+Nguyen, Van-Quang, Masanori Suganuma, and Takayuki Okatani. "Efficient Attention Mechanism for Handling All the Interactions between Many Inputs with Application to Visual Dialog." arXiv preprint arXiv:1911.11390 (2019).
+}
+```
+
 Setup and Environment
 ----------------------
 This code is implemented using the following environment configurations:
