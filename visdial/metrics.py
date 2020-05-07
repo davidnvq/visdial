@@ -15,15 +15,8 @@ Each ``Metric`` must atleast implement three methods:
 Caveat, if you wish to implement your own class of Metric, make sure you call
 ``detach`` on output tensors (like logits), else it will cause memory leaks.
 
-Quang modified
-==============
-TODONE: A bug for batch_size = 1
-```
-# shape: (batch_size, num_options)
-predicted_ranks = predicted_ranks.squeeze()
-
-# should be changed to
-predicted_ranks = predicted_ranks.squeeze(1)
+Credit:
+https://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/metrics.py
 """
 import torch
 import pickle
@@ -89,11 +82,11 @@ class SparseGTMetrics(object):
             # convert to numpy array for easy calculation.
             __rank_list = torch.tensor(self._rank_list).float()
             metrics = {
-                key + "r@1" : torch.mean((__rank_list <= 1).float()).item(),
-                key + "r@5" : torch.mean((__rank_list <= 5).float()).item(),
+                key + "r@1": torch.mean((__rank_list <= 1).float()).item(),
+                key + "r@5": torch.mean((__rank_list <= 5).float()).item(),
                 key + "r@10": torch.mean((__rank_list <= 10).float()).item(),
                 key + "mean": torch.mean(__rank_list).item(),
-                key + "mrr" : torch.mean(__rank_list.reciprocal()).item(),
+                key + "mrr": torch.mean(__rank_list.reciprocal()).item(),
             }
         else:
             metrics = {}
@@ -183,124 +176,3 @@ class NDCG(object):
     def reset(self):
         self._ndcg_numerator = 0.0
         self._ndcg_denominator = 0.0
-
-
-class Monitor(object):
-
-    def __init__(self, dataset, save_path='data/monitor_val.pkl'):
-        self.dataset = dataset
-        self.save_path = save_path
-        self.img_dialogs = {}
-        self.img_ids = []
-        self.detokenize = TreebankWordDetokenizer().detokenize
-        self.init_dialogs()
-
-    def get_elem_dict(self, elem):
-
-        dialog = elem['dialog']
-        questions = [self.detokenize(r['question']) for r in dialog]
-        answers = [self.detokenize(r['answer']) for r in dialog]
-        opts = [[self.detokenize(r['answer_options'][i])
-                 for i in range(100)] for r in dialog]
-
-        scores = [[] for _ in range(10)]
-        attn_weights = [[] for _ in range(10)]
-
-        rel_ans_idx = elem['rel_ans_idx']
-
-        round_id = elem['round_id'] - 1
-        rel_scores, rel_indices = torch.sort(elem['gt_relevance'], descending=True)
-        rel_scores = rel_scores[:10]
-        rel_indices = rel_indices[:10]
-
-        if rel_ans_idx not in rel_indices:
-            rel_indices = torch.cat([rel_indices, torch.tensor([rel_ans_idx])], dim=-1)
-            rel_scores = torch.cat([rel_scores, rel_scores[-1:]], dim=-1)
-
-        rel_texts = [self.detokenize(dialog[round_id]['answer_options'][idx])
-                     for idx in rel_indices]
-
-        rel_question = self.detokenize(dialog[round_id]['question'])
-        rel_answer = self.detokenize(dialog[round_id]['answer'])
-
-        return {
-            'caption'     : elem['caption'],
-            'dialog'      : [questions, answers],
-            'opts'        : opts,
-            'scores'      : scores,
-            'rel_answer'  : rel_answer,
-            'rel_indices' : rel_indices,
-            'rel_scores'  : rel_scores,
-            'round_id'    : elem['round_id'],
-            'rel_texts'   : rel_texts,
-            'rel_preds'   : [],
-            'rel_question': rel_question,
-            'rel_ans_idx' : rel_ans_idx,
-            'attn_weights': attn_weights,
-        }
-
-    def update_elem(self, img_dialogs, img_id, output, target, attn_weight):
-        # shape: output [10, 100]
-        # shape: target [10, ]
-        elem_dict = img_dialogs[img_id]
-
-        # Ground Truth Relevance in round_id only
-        round_id = elem_dict['round_id']
-
-        # shape: [1, ] # 1 round - ground truth
-        rel_ans_idx = output[round_id - 1][elem_dict['rel_ans_idx']].cpu().numpy()
-        elem_dict['rel_preds'].append(rel_ans_idx)
-
-        # All answers in 10 rounds
-        for r in range(10):
-            prob100_dict = {ans_opt: value.item()
-                            for ans_opt, value in
-                            zip(elem_dict['opts'][r], output[r])}
-
-            target_key = elem_dict['opts'][r][target[r]]
-
-            sorted_keys = sorted(prob100_dict,
-                                 key=prob100_dict.get,
-                                 reverse=True)
-
-            if target_key not in sorted_keys:
-                sorted_keys.append(target_key)
-
-            prob10_dict = {key: prob100_dict[key]
-                           for key in sorted_keys}
-
-            elem_dict['scores'][r].append(prob10_dict)  # r = round
-
-            if attn_weight is not None:
-                elem_dict['attn_weights'][r].append(attn_weight[r].cpu().numpy())
-
-    def init_dialogs(self):
-        for i in range(len(self.dataset)):
-            elem = self.dataset.__getitem__(i, is_monitor=True)
-            self.img_ids.append(elem['img_id'])
-            self.img_dialogs[elem['img_id']] = self.get_elem_dict(elem)
-
-    def update(self, batch_img_ids, batch_logits, batch_targets, attn_weights=None):
-        batch_img_ids = batch_img_ids.cpu()
-        batch_logits = batch_logits.cpu()
-        batch_targets = batch_targets.cpu()
-
-        batch_output = torch.softmax(batch_logits, dim=-1)
-        if attn_weights is None:
-            attn_weights = [None] * len(batch_logits)
-
-        for i in range(len(batch_img_ids)):
-            self.update_elem(self.img_dialogs,
-                             batch_img_ids[i].item(),
-                             batch_output[i],
-                             batch_targets[i],
-                             attn_weights[i])
-
-    def export(self):
-        with open(self.save_path, 'wb') as file:
-            pickle.dump([self.img_ids, self.img_dialogs], file)
-
-
-def test_monitor():
-    monitor = Monitor()
-    pass

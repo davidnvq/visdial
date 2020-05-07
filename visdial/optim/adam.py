@@ -38,10 +38,10 @@ def get_weight_decay_params(model, weight_decay=1e-5, skip_list=[]):
             decay_params.append(param)
 
     return [
-        {'params'      : no_decay_params,
+        {'params': no_decay_params,
          'weight_decay': 0.
          },
-        {'params'      : decay_params,
+        {'params': decay_params,
          'weight_decay': weight_decay
          }
     ]

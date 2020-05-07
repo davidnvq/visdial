@@ -2,7 +2,13 @@ import math
 import torch
 import torch.nn as nn
 
+
 class PositionalEmbedding(nn.Module):
+    """
+    Compute the Positional Embedding based on
+    BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding
+    https://arxiv.org/pdf/1810.04805
+    """
 
     def __init__(self, embedding_size, max_len=512):
         super().__init__()
@@ -22,19 +28,25 @@ class PositionalEmbedding(nn.Module):
 
     def forward(self, x):
         """
-        :param x: shape [bs, seq_len,...] expect!
-        :return:  shape [bs, seq_len, hidden_size]
+        Arguments
+        ---------
+        x: torch.FloatTensor
+        	The input tensor which is a sequence of tokens
+        	Shape [batch_size, seq_len, ...] is expected!
+        Returns
+        -------
+        pos_embedding: torch.FloatTensor
+            The positional embeddings for all the tokens in the sequence!
+            Shape [batch_size, seq_len, hidden_size]
         """
-        # shape [BS, seq_len]
 
+        # shape [BS, seq_len]
         bs, seq_len = x.size(0), x.size(1)
 
-        # y = x.view(-1, x.size(-1)) if len(x.size()) > 2 else x
         # shape [1, seq_len, embedding_size]
-        # out = self.pe[:, :y.size(1)]
-        out = self.pe[:, :seq_len]
+        pos_embedding = self.pe[:, :seq_len]
 
         # shape [BS, seq_len, embedding_size]
-        out = out.repeat(bs, 1, 1)
+        pos_embedding = pos_embedding.repeat(bs, 1, 1)
 
-        return out
+        return pos_embedding

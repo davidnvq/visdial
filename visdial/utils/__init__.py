@@ -1,2 +1,1 @@
-from .tensor_utils import move_to_cuda
-from .utils import check_flag, clones
+from .utils import check_flag, clones, move_to_cuda, get_num_params

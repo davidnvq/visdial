@@ -3,6 +3,8 @@ A Vocabulary maintains a mapping between words and corresponding unique
 integers, holds special integers (tokens) for indicating start and end of
 sequence, and offers functionality to map out-of-vocabulary words to the
 corresponding token.
+Credit:
+https://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/vocabulary.py
 """
 import json
 import os
@@ -95,10 +97,3 @@ class Vocabulary(object):
 
     def __len__(self):
         return len(self.index2word)
-
-
-# in Glove600
-word_not_founds =  ['<PAD>', '<S>', '</S>', '<UNK>', 'selfie', '20ish', 'babywearing', 'yess', 'idk', 'tannish', 'nno', 'skiis', 'tanish', 'no-', 'pepperonis', 'yrd', 'no*', '*yes', 'noonish', 'nunchuck', '20s-30s', 'yes-', 'goldish', 'frig', 'ywa', 'tshirt', 'yyes', 'yees', 'hahaha', 'yes3', 'frisbe', 'mid-swing', 'yesw', 'yres', 'brocolli', 'yse', 'eys', 'afternoonish', 'silverish', 'trolly', '10ish', 'sorry**', '20-30s', 'yes*', 'yesd', "'is", 'kiteboard', 'no**', '30s-40s', 'tell-', "'no", 'refridgerator', 'drainer', 'yesa', 'no-but', 'bathmat', 'wakeboarder', 'parasails', 't-ball', "'t", 'tee-shirt', 'tyes', 'sandwhich', 'frizbee', 'opps', '25ish', '60ish', 'it-', 'parasailers', 'no-just', 'surfboarding', 'breakroom', 'skii', 'half-eaten', 'deckered', "'what", 'lived-in', 'any1', 'selfies', '*no', 'wet-suit', "'yes", 'hoody', '7ish', 'parasailer', 'dalmation', 'creamish', 'preforming', 'upclose', 'sorry*', 'surfboarders', 'blck', 'loveseats', 'overcasted', 'coldish', 'mturk', 'ytes', 'buliding', '40s-50s', 'eatable', 'white*', 'passanger', 'mid-jump', 'cruller', 'no-it', 'skort', 'delish', 'so-', 'sorry***', 'blowdryer', 'gnar', 'yellow-ish', 'toliet', 'bedskirt', 'white-fish', 'surfboarder', 'concerte', 'black*', 'white-ish', 'yeds', 'long-hair', 'ohhhhh', 'yws', 'amature', 'yes**', '*i', '*there', 'sortof', 'tell*', 'windsocks', 'cleanish', 'see-thru', 'non-veg', '35ish', 'yes-in', "30's-40", 'yes4', 'sorry-', 'peperoni', '9ish', 'freez', 'urnials', 'mid-stride', 'mini-fridge', '5ish', 'yno', 'right-', 'bi-plane', 'stir-fry', 'iwth', 'wakeboards', 'clearish', 'tallish', 'hotplate', 'uhaul', 'doubledecker', '12ish', 'black-', 'gray-blue', 'tanding', 'diffrent', '-but', 'gray-ish', 'footlongs', 'lunchmeat', 'silve', 'danishes', 'knick-knacks', 'barbwire', "20's-30", 'multi-colors', 'paperclips', 'inground', 'yes-one', 'multicolored-', 'small-ish', 'papasan', 'woops', 'no4', 'prolly', '*is', 'counter-top', 'waverunner', 'yesl', 'floaties', 'vegitables', 'probaby', 'mayby', 'UNK']
-
-# in Glove840B
-word_not_founds = ['<PAD>', '</S>', '<UNK>', 'no-', 'no*', '*yes', 'yes-', 'ywa', 'yyes', 'yes3', 'frisbe', 'yesw', 'afternoonish', 'sorry**', 'yes*', 'yesd', "'is", 'no**', 'tell-', "'no", 'yesa', 'no-but', "'t", 'it-', 'no-just', 'deckered', "'what", '*no', "'yes", 'parasailer', 'sorry*', 'surfboarders', 'overcasted', 'white*', 'no-it', 'so-', 'sorry***', 'white-fish', 'surfboarder', 'black*', 'yeds', 'yws', 'yes**', '*i', '*there', 'tell*', 'yes-in', "30's-40", 'yes4', 'sorry-', 'urnials', 'right-', 'black-', '-but', "20's-30", 'yes-one', 'multicolored-', '*is', 'yesl']

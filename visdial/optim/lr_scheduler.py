@@ -88,7 +88,7 @@ class LRScheduler(object):
                 if cur_epoch >= milestone:
                     continue
                 else:
-                    return i-1, milestones[i - 1], milestones[i]
+                    return i - 1, milestones[i - 1], milestones[i]
 
         cur_epoch = int(cur_iter / self.total_iters_per_epoch)
         idx, low_epoch, high_epoch = find_range(cur_epoch)
@@ -99,7 +99,6 @@ class LRScheduler(object):
             lr = 1.25e-4
         total_iters = (high_epoch - low_epoch) * self.total_iters_per_epoch
         return lr * (1 + math.cos(math.pi * rel_iter / total_iters)) / 2
-
 
 
 def test_lr_scheduler(scheduler_type='LinearLR'):
@@ -127,10 +126,9 @@ def test_lr_scheduler(scheduler_type='LinearLR'):
             # print(adam.state_dict)
             global_steps += 1
 
-
     for i, l in enumerate(lr):
         print("%.5f" % l, end=' ')
-        if (i+1) % num_iter_per_epoch == 0:
+        if (i + 1) % num_iter_per_epoch == 0:
             print("")
 
     plt.plot(np.arange(global_steps), lr)

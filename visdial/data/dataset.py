@@ -6,6 +6,7 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 # from pytorch_pretrained_bert import BertTokenizer
 from visdial.data.vocabulary import Vocabulary
+from visdial.utils import move_to_cuda
 
 from visdial.data.readers import DialogsReader, DenseAnnotationsReader, ImageFeaturesHdfReader
 
@@ -19,6 +20,7 @@ class VisDialDataset(Dataset):
     to the appropriate split, it returns dictionary of question, image,
     history, ground truth answer, answer options, dense annotations etc.
     """
+
     def __init__(self, config, split="train"):
         super().__init__()
         self.config = config
@@ -42,8 +44,21 @@ class VisDialDataset(Dataset):
         return len(self.image_ids)
 
     def __getitem__(self, index, is_monitor=False):
+
+        if is_monitor:
+            out = self.getimage(index)
+            res = {}
+            for key in out:
+                res[key] = out[key].unsqueeze(0)
+            res = move_to_cuda(res, 'cuda:0')
+            return res
+        else:
+            image_id = self.image_ids[index]
+            out = self.getimage(image_id)
+            return out
+
+    def getimage(self, image_id, is_monitor=False):
         # Get image_id, which serves as a primary key for current instance.
-        image_id = self.image_ids[index]
 
         visdial_instance = self.dialogs_reader[image_id]
         dialog = visdial_instance['dialog']
@@ -86,7 +101,6 @@ class VisDialDataset(Dataset):
         path = os.path.expanduser(path)
 
         genome_path = config['dataset'].get('genome_path', None)
-        print('genome_path', genome_path)
         if genome_path is None:
             hdf_reader = ImageFeaturesHdfReader(path)
         else:
@@ -263,14 +277,10 @@ class VisDialDataset(Dataset):
 
         caption = caption[: self.config['dataset']['max_seq_len'] * 2]
 
-        # print("len(questions)", len(questions))
         for i in range(len(questions)):
             questions[i] = questions[i][: self.config['dataset']['max_seq_len']]
-        # print('question', questions[i])
 
-        # print('len(answers)', len(answers))
         for i in range(len(answers)):
-            # print('answer', answers[i])
             if self.config['dataset']['is_add_boundaries'] and self.split != 'test':
                 answers[i] = answers[i][1: -1]
             else:
@@ -286,7 +296,6 @@ class VisDialDataset(Dataset):
                 break
             history.append(question + answer + [self.tokenizer.EOS_INDEX])
 
-        # print('history', history)
         # Drop last entry from history (there's no eleventh question).
         history = history[:-1]
         max_history_length = self.config['dataset']['max_seq_len'] * 2
@@ -322,8 +331,6 @@ class VisDialDataset(Dataset):
             caption = self.tokens_to_ids(caption)
 
             for i in range(len(dialog)):
-                # print(f'question {i}: {dialog[i]["question"]}')
-                # print(f'answer {i}: {dialog[i]["answer"]}')
                 dialog[i]["question"] = self.tokens_to_ids(dialog[i]["question"])
                 if self.split == 'test':
                     dialog[i]["answer"] = self.tokens_to_ids(dialog[i]['answer'])
