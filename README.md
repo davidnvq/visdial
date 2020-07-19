@@ -301,7 +301,7 @@ Performance on `v0.9 validation` split (trained on `v0.9` train):
 Acknowledgements
 ----------------
 
-* This code is built upon the fork of [visdial-challenge-starter-pytorch](https://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch) 
+* This evaluation code is built upon the fork of [visdial-challenge-starter-pytorch](https://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch) 
 developed by the team of researchers from Machine Learning and Perception Lab, Georgia Tech 
 for [Visual Dialog Challenge 2019](https://visualdialog.org/challenge/2019).
 We would like to thank them for providing this testbed. 
