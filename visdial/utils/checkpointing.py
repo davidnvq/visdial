@@ -1,24 +1,11 @@
-"""
-A checkpoint manager periodically saves model and optimizer as .pth
-files during training.
-
-Checkpoint managers help with experiment reproducibility, they record
-the commit SHA of your current codebase in the checkpoint saving
-directory. While loading any checkpoint from other commit, they raise a
-friendly warning, a signal to inspect commit diffs for potential bugs.
-Moreover, they copy experiment hyper-parameters as a YAML config in
-this directory.
-
-That said, always run your experiments after committing your changes,
-this doesn't account for untracked or staged, but uncommitted changes.
-"""
 from pathlib import Path
-from subprocess import PIPE, Popen
 import warnings
+import os
 
 import torch
 from torch import nn, optim
 import yaml
+from visdial.utils import check_flag
 
 
 class CheckpointManager(object):
@@ -30,7 +17,7 @@ class CheckpointManager(object):
         For ``DataParallel`` modules, ``model.module.state_dict()`` is
         saved, instead of ``model.state_dict()``.
 
-    Parameters
+    Arguments
     ----------
     model: nn.Module
         Wrapped model, which needs to be checkpointed.
@@ -38,31 +25,14 @@ class CheckpointManager(object):
         Wrapped optimizer which needs to be checkpointed.
     checkpoint_dirpath: str
         Path to an empty or non-existent directory to save checkpoints.
-    step_size: int, optional (default=1)
-        Period of saving checkpoints.
-    last_epoch: int, optional (default=-1)
-        The index of last epoch.
-
-    Example
-    --------
-    >>> model = torch.nn.Linear(10, 2)
-    >>> optimizer = torch.optim.Adam(model.parameters())
-    >>> ckpt_manager = CheckpointManager(model, optimizer, "/tmp/ckpt")
-    >>> for epoch in range(20):
-    ...     for batch in dataloader:
-    ...         do_iteration(batch)
-    ...     ckpt_manager.step()
     """
 
     def __init__(
-        self,
-        model,
-        optimizer,
-        checkpoint_dirpath,
-        step_size=1,
-        last_epoch=-1,
-        **kwargs,
-    ):
+            self,
+            model,
+            optimizer,
+            checkpoint_dirpath,
+            config={}):
 
         if not isinstance(model, nn.Module):
             raise TypeError("{} is not a Module".format(type(model).__name__))
@@ -75,105 +45,99 @@ class CheckpointManager(object):
         self.model = model
         self.optimizer = optimizer
         self.ckpt_dirpath = Path(checkpoint_dirpath)
-        self.step_size = step_size
-        self.last_epoch = last_epoch
-        self.init_directory(**kwargs)
+        self.best_ndcg = 0.0
+        self.best_mean = 100.
+        self.init_directory(config)
+        self.best_ndcg_epoch = 0
+        self.best_mean_epoch = 0
 
     def init_directory(self, config={}):
-        """Initialize empty checkpoint directory and record commit SHA
-        in it. Also save hyper-parameters config in this directory to
-        associate checkpoints with their hyper-parameters.
-        """
-
+        """init"""
         self.ckpt_dirpath.mkdir(parents=True, exist_ok=True)
-        # save current git commit hash in this checkpoint directory
-        commit_sha_subprocess = Popen(
-            ["git", "rev-parse", "--short", "HEAD"], stdout=PIPE, stderr=PIPE
-        )
-        commit_sha, _ = commit_sha_subprocess.communicate()
-        commit_sha = commit_sha.decode("utf-8").strip().replace("\n", "")
-        commit_sha_filepath = self.ckpt_dirpath / f".commit-{commit_sha}"
-        commit_sha_filepath.touch()
-        yaml.dump(
-            config,
-            open(str(self.ckpt_dirpath / "config.yml"), "w"),
-            default_flow_style=False,
-        )
 
-    def step(self, epoch=None):
+        import json
+        with open(self.ckpt_dirpath / 'config.json', 'w') as f:
+            json.dump(config, f)
+
+    def step(self, epoch=None, only_best=False, metrics=None, key=''):
         """Save checkpoint if step size conditions meet. """
+        if check_flag(self.model.encoder.config['dataset'], 'v0.9'):
+            self._save_state_dict(str(epoch), epoch, metrics)
+            return
 
-        if not epoch:
-            epoch = self.last_epoch + 1
-        self.last_epoch = epoch
+        if not only_best:
+            self._save_state_dict(str(epoch), epoch, metrics)
 
-        if not self.last_epoch % self.step_size:
-            torch.save(
-                {
-                    "model": self._model_state_dict(),
-                    "optimizer": self.optimizer.state_dict(),
-                },
-                self.ckpt_dirpath / f"checkpoint_{self.last_epoch}.pth",
-            )
+            if metrics[key + 'ndcg'] >= self.best_ndcg:
+                self.best_ndcg = metrics[key + 'ndcg']
+                self.best_ndcg_epoch = epoch
 
-    def _model_state_dict(self):
+            if metrics[key + 'mean'] >= self.best_ndcg:
+                self.best_mean = metrics[key + 'mean']
+                self.best_mean_epoch = epoch
+
+        else:
+            if metrics[key + 'ndcg'] >= self.best_ndcg:
+                self.best_ndcg = metrics[key + 'ndcg']
+                self.best_ndcg_epoch = epoch
+                print('Save best ndcg {} at epoch {}'.format(self.best_ndcg, epoch))
+                self._save_state_dict('best_ndcg', epoch, metrics)
+
+            if metrics[key + 'mean'] <= self.best_mean:
+                self.best_mean = metrics[key + 'mean']
+                self.best_ndcg_epoch = epoch
+                print('Save best mean {} at epoch {}'.format(self.best_mean, epoch))
+                self._save_state_dict('best_mean', epoch, metrics)
+
+        self._save_state_dict('last', epoch, metrics)
+
+    def _save_state_dict(self, name, epoch, metrics):
+        """save state_dict"""
+        state_dict = {'model': self._get_model(),
+                      'optimizer': self.optimizer,
+                      'epoch': epoch,
+                      'metrics': metrics}
+        ckpt_path = self.ckpt_dirpath / f"checkpoint_{name}.pth"
+        torch.save(state_dict, ckpt_path)
+
+    def _get_model(self):
         """Returns state dict of model, taking care of DataParallel case."""
         if isinstance(self.model, nn.DataParallel):
-            return self.model.module.state_dict()
+            return self.model.module
         else:
-            return self.model.state_dict()
+            return self.model
 
 
-def load_checkpoint(checkpoint_pthpath):
-    """Given a path to saved checkpoint, load corresponding state dicts
-    of model and optimizer from it. This method checks if the current
-    commit SHA of codebase matches the commit SHA recorded when this
-    checkpoint was saved by checkpoint manager.
-
-    Parameters
-    ----------
-    checkpoint_pthpath: str or pathlib.Path
-        Path to saved checkpoint (as created by ``CheckpointManager``).
-
-    Returns
-    -------
-    nn.Module, optim.Optimizer
-        Model and optimizer state dicts loaded from checkpoint.
-
-    Raises
-    ------
-    UserWarning
-        If commit SHA do not match, or if the directory doesn't have
-        the recorded commit SHA.
+def load_checkpoint(model, optimizer, checkpoint_pthpath=None, device='cuda', resume=False):
+    """Load checkpoint including:
+        the model, optimizer state_dicts
     """
+    # load
 
-    # if isinstance(checkpoint_pthpath, str):
-    #     checkpoint_pthpath = Path(checkpoint_pthpath)
-    # checkpoint_dirpath = checkpoint_pthpath.resolve().parent
-    # checkpoint_commit_sha = list(checkpoint_dirpath.glob(".commit-*"))
-    #
-    # if len(checkpoint_commit_sha) == 0:
-    #     raise UserWarning(
-    #         "Commit SHA was not recorded while saving checkpoints."
-    #     )
-    # else:
-    #     # verify commit sha, raise warning if it doesn't match
-    #     commit_sha_subprocess = Popen(
-    #         ["git", "rev-parse", "--short", "HEAD"], stdout=PIPE, stderr=PIPE
-    #     )
-    #     commit_sha, _ = commit_sha_subprocess.communicate()
-    #     commit_sha = commit_sha.decode("utf-8").strip().replace("\n", "")
-    #
-    #     # remove ".commit-"
-    #     checkpoint_commit_sha = checkpoint_commit_sha[0].name[8:]
-    #
-    #     if commit_sha != checkpoint_commit_sha:
-    #         warnings.warn(
-    #             f"Current commit ({commit_sha}) and the commit "
-    #             f"({checkpoint_commit_sha}) at which checkpoint was saved,"
-    #             " are different. This might affect reproducibility."
-    #         )
+    if checkpoint_pthpath is not None:
+        components = torch.load(checkpoint_pthpath, map_location=device)
+        print("Loaded model from {}".format(checkpoint_pthpath))
+        print('At epoch:', components.get('epoch'))
+        print('Metrics score:', components.get('metrics'))
+    else:
+        print("Can't load weight from {}".format(checkpoint_pthpath))
+        return 0, model, optimizer
 
-    # load encoder, decoder, optimizer state_dicts
-    components = torch.load(checkpoint_pthpath)
-    return components["model"], components["optimizer"]
+    if resume:
+        # "path/to/checkpoint_xx.pth" -> xx
+        print('Resume training....')
+        start_epoch = components['epoch']
+        model = components["model"]
+        optimizer = components["optimizer"]
+        return start_epoch, model, optimizer
+
+    else:
+        model = components["model"]
+        return 0, model, optimizer
+
+
+def load_checkpoint_from_config(model, optimizer, config):
+    return load_checkpoint(model, optimizer,
+                           checkpoint_pthpath=config['callbacks']['path_pretrained_ckpt'],
+                           resume=config['callbacks']['resume'],
+                           device='cuda')

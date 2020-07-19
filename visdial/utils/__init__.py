@@ -1,1 +1,1 @@
-from .dynamic_rnn import DynamicRNN  # noqa: F401
+from .utils import check_flag, clones, move_to_cuda, get_num_params

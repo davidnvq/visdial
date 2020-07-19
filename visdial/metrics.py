@@ -15,17 +15,12 @@ Each ``Metric`` must atleast implement three methods:
 Caveat, if you wish to implement your own class of Metric, make sure you call
 ``detach`` on output tensors (like logits), else it will cause memory leaks.
 
-Quang modified
-==============
-TODONE: A bug for batch_size = 1
-```
-# shape: (batch_size, num_options)
-predicted_ranks = predicted_ranks.squeeze()
-
-# should be changed to
-predicted_ranks = predicted_ranks.squeeze(1)
+Credit:
+https://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/metrics.py
 """
 import torch
+import pickle
+from nltk.tokenize.treebank import TreebankWordDetokenizer
 
 
 def scores_to_ranks(scores: torch.Tensor):
@@ -59,7 +54,7 @@ class SparseGTMetrics(object):
         self._rank_list = []
 
     def observe(
-        self, predicted_scores: torch.Tensor, target_ranks: torch.Tensor
+            self, predicted_scores: torch.Tensor, target_ranks: torch.Tensor
     ):
         predicted_scores = predicted_scores.detach()
 
@@ -81,17 +76,17 @@ class SparseGTMetrics(object):
         ]
         self._rank_list.extend(list(predicted_gt_ranks.cpu().numpy()))
 
-    def retrieve(self, reset: bool = True):
+    def retrieve(self, reset: bool = True, key=""):
         num_examples = len(self._rank_list)
         if num_examples > 0:
             # convert to numpy array for easy calculation.
             __rank_list = torch.tensor(self._rank_list).float()
             metrics = {
-                "r@1": torch.mean((__rank_list <= 1).float()).item(),
-                "r@5": torch.mean((__rank_list <= 5).float()).item(),
-                "r@10": torch.mean((__rank_list <= 10).float()).item(),
-                "mean": torch.mean(__rank_list).item(),
-                "mrr": torch.mean(__rank_list.reciprocal()).item(),
+                key + "r@1": torch.mean((__rank_list <= 1).float()).item(),
+                key + "r@5": torch.mean((__rank_list <= 5).float()).item(),
+                key + "r@10": torch.mean((__rank_list <= 10).float()).item(),
+                key + "mean": torch.mean(__rank_list).item(),
+                key + "mrr": torch.mean(__rank_list.reciprocal()).item(),
             }
         else:
             metrics = {}
@@ -110,7 +105,7 @@ class NDCG(object):
         self._ndcg_denominator = 0.0
 
     def observe(
-        self, predicted_scores: torch.Tensor, target_relevance: torch.Tensor
+            self, predicted_scores: torch.Tensor, target_relevance: torch.Tensor
     ):
         """
         Observe model output scores and target ground truth relevance and
@@ -166,10 +161,10 @@ class NDCG(object):
         discounts = torch.log2(torch.arange(len(rankings)).float() + 2)
         return torch.sum(sorted_relevance / discounts, dim=-1)
 
-    def retrieve(self, reset: bool = True):
+    def retrieve(self, reset: bool = True, key=""):
         if self._ndcg_denominator > 0:
             metrics = {
-                "ndcg": float(self._ndcg_numerator / self._ndcg_denominator)
+                key + "ndcg": float(self._ndcg_numerator / self._ndcg_denominator)
             }
         else:
             metrics = {}

@@ -1,6 +1,6 @@
-from visdial.encoders.lf import LateFusionEncoder
-
-
-def Encoder(model_config, *args):
-    name_enc_map = {"lf": LateFusionEncoder}
-    return name_enc_map[model_config["encoder"]](model_config, *args)
+from visdial.encoders.text_encoder import HistEncoder
+from visdial.encoders.text_encoder import TextEncoder
+from visdial.encoders.text_encoder import QuesEncoder
+from visdial.encoders.encoder import Encoder
+from visdial.encoders.img_encoder import ImageEncoder
+from visdial.encoders.attn_encoder import AttentionStackEncoder

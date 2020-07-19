@@ -1,212 +1,75 @@
-import argparse
 import json
+import argparse
+
 import os
-
 import torch
-from torch import nn
-from torch.utils.data import DataLoader
 from tqdm import tqdm
-import yaml
-
+from torch.utils.data import DataLoader
 from visdial.data.dataset import VisDialDataset
-from visdial.encoders import Encoder
-from visdial.decoders import Decoder
 from visdial.metrics import SparseGTMetrics, NDCG, scores_to_ranks
-from visdial.model import EncoderDecoderModel
-from visdial.utils.checkpointing import load_checkpoint
 
-
-parser = argparse.ArgumentParser(
-    "Evaluate and/or generate EvalAI submission file."
-)
-parser.add_argument(
-    "--config-yml",
-    default="configs/lf_disc_faster_rcnn_x101.yml",
-    help="Path to a config file listing reader, model and optimization "
-    "parameters.",
-)
-parser.add_argument(
-    "--split",
-    default="val",
-    choices=["val", "test"],
-    help="Which split to evaluate upon.",
-)
-parser.add_argument(
-    "--val-json",
-    default="data/visdial_1.0_val.json",
-    help="Path to VisDial v1.0 val data. This argument doesn't work when "
-    "--split=test.",
-)
-parser.add_argument(
-    "--val-dense-json",
-    default="data/visdial_1.0_val_dense_annotations.json",
-    help="Path to VisDial v1.0 val dense annotations (if evaluating on val "
-    "split). This argument doesn't work when --split=test.",
-)
-parser.add_argument(
-    "--test-json",
-    default="data/visdial_1.0_test.json",
-    help="Path to VisDial v1.0 test data. This argument doesn't work when "
-    "--split=val.",
-)
-
-parser.add_argument_group("Evaluation related arguments")
-parser.add_argument(
-    "--load-pthpath",
-    default="checkpoints/checkpoint_xx.pth",
-    help="Path to .pth file of pretrained checkpoint.",
-)
-
-parser.add_argument_group(
-    "Arguments independent of experiment reproducibility"
-)
-parser.add_argument(
-    "--gpu-ids",
-    nargs="+",
-    type=int,
-    default=-1,
-    help="List of ids of GPUs to use.",
-)
-parser.add_argument(
-    "--cpu-workers",
-    type=int,
-    default=4,
-    help="Number of CPU workers for reading data.",
-)
-parser.add_argument(
-    "--overfit",
-    action="store_true",
-    help="Overfit model on 5 examples, meant for debugging.",
-)
-parser.add_argument(
-    "--in-memory",
-    action="store_true",
-    help="Load the whole dataset and pre-extracted image features in memory. "
-    "Use only in presence of large RAM, atleast few tens of GBs.",
-)
-
-parser.add_argument_group("Submission related arguments")
-parser.add_argument(
-    "--save-ranks-path",
-    default="logs/ranks.json",
-    help="Path (json) to save ranks, in a EvalAI submission format.",
-)
-
-# For reproducibility.
-# Refer https://pytorch.org/docs/stable/notes/randomness.html
-torch.manual_seed(0)
-torch.cuda.manual_seed_all(0)
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
-
-# =============================================================================
-#   INPUT ARGUMENTS AND CONFIG
-# =============================================================================
+parser = argparse.ArgumentParser()
+parser.add_argument("--model_path", default='checkpoints/model_v1.pth')
+parser.add_argument("--split", default="test")
+parser.add_argument("--decoder_type", default='disc')
+parser.add_argument("--device", default="cuda:0")
+parser.add_argument("--output_path", default="checkpoints/val.json")
 
 args = parser.parse_args()
+device = args.device
+split = args.split
+decoder_type = args.decoder_type
+model = torch.load(args.model_path)
+config = model.encoder.config
 
-# keys: {"dataset", "model", "solver"}
-config = yaml.load(open(args.config_yml))
-
-if isinstance(args.gpu_ids, int):
-    args.gpu_ids = [args.gpu_ids]
-device = (
-    torch.device("cuda", args.gpu_ids[0])
-    if args.gpu_ids[0] >= 0
-    else torch.device("cpu")
-)
-
-# Print config and args.
-print(yaml.dump(config, default_flow_style=False))
-for arg in vars(args):
-    print("{:<20}: {}".format(arg, getattr(args, arg)))
-
-
-# =============================================================================
-#   SETUP DATASET, DATALOADER, MODEL
-# =============================================================================
-
-if args.split == "val":
-    val_dataset = VisDialDataset(
-        config["dataset"],
-        args.val_json,
-        args.val_dense_json,
-        overfit=args.overfit,
-        in_memory=args.in_memory,
-        return_options=True,
-        add_boundary_toks=False
-        if config["model"]["decoder"] == "disc"
-        else True,
+test_mode = False
+if args.split == 'test':
+    test_mode = True
+    config['dataset']['test_feat_img_path'] = config['dataset']['train_feat_img_path'].replace(
+        "trainval_resnet101_faster_rcnn_genome__num_boxes",
+        "test2018_resnet101_faster_rcnn_genome__num_boxes"
     )
-else:
-    val_dataset = VisDialDataset(
-        config["dataset"],
-        args.test_json,
-        overfit=args.overfit,
-        in_memory=args.in_memory,
-        return_options=True,
-        add_boundary_toks=False
-        if config["model"]["decoder"] == "disc"
-        else True,
+    config['dataset']['test_json_dialog_path'] = config['dataset']['train_json_dialog_path'].replace(
+        'visdial_1.0_train.json',
+        'visdial_1.0_test.json'
     )
-val_dataloader = DataLoader(
-    val_dataset,
-    batch_size=config["solver"]["batch_size"]
-    if config["model"]["decoder"] == "disc"
-    else 5,
-    num_workers=args.cpu_workers,
-)
 
-# Pass vocabulary to construct Embedding layer.
-encoder = Encoder(config["model"], val_dataset.vocabulary)
-decoder = Decoder(config["model"], val_dataset.vocabulary)
-print("Encoder: {}".format(config["model"]["encoder"]))
-print("Decoder: {}".format(config["model"]["decoder"]))
+model = model.to(device)
 
-# Share word embedding between encoder and decoder.
-decoder.word_embed = encoder.word_embed
-
-# Wrap encoder and decoder in a model.
-model = EncoderDecoderModel(encoder, decoder).to(device)
-if -1 not in args.gpu_ids:
-    model = nn.DataParallel(model, args.gpu_ids)
-
-model_state_dict, _ = load_checkpoint(args.load_pthpath)
-if isinstance(model, nn.DataParallel):
-    model.module.load_state_dict(model_state_dict)
-else:
-    model.load_state_dict(model_state_dict)
-print("Loaded model from {}".format(args.load_pthpath))
-
-# Declare metric accumulators (won't be used if --split=test)
 sparse_metrics = SparseGTMetrics()
 ndcg = NDCG()
 
-# =============================================================================
-#   EVALUATION LOOP
-# =============================================================================
+dataset = VisDialDataset(config, split=args.split)
+dataloader = DataLoader(dataset, batch_size=1)
 
-model.eval()
+model = model.eval()
 ranks_json = []
 
-for _, batch in enumerate(tqdm(val_dataloader)):
+for idx, batch in enumerate(tqdm(dataloader)):
+    torch.cuda.empty_cache()
     for key in batch:
         batch[key] = batch[key].to(device)
-    with torch.no_grad():
-        output = model(batch)
 
+    with torch.no_grad():
+        output = model(batch, test_mode=test_mode)
+
+    if decoder_type == 'misc':
+        output = (output['opts_out_scores'] + output['opt_scores']) / 2.0
+    elif decoder_type == 'disc':
+        output = output['opt_scores']
+    elif decoder_type == 'gen':
+        output = output['opts_out_scores']
     ranks = scores_to_ranks(output)
+
     for i in range(len(batch["img_ids"])):
-        # Cast into types explicitly to ensure no errors in schema.
-        # Round ids are 1-10, not 0-9
-        if args.split == "test":
+        if split == split:
             ranks_json.append(
                 {
                     "image_id": batch["img_ids"][i].item(),
                     "round_id": int(batch["num_rounds"][i].item()),
                     "ranks": [
                         rank.item()
-                        for rank in ranks[i][batch["num_rounds"][i] - 1]
+                        for rank in ranks[i][0]
                     ],
                 }
             )
@@ -220,21 +83,19 @@ for _, batch in enumerate(tqdm(val_dataloader)):
                     }
                 )
 
-    if args.split == "val":
-        sparse_metrics.observe(output, batch["ans_ind"])
-        if "gt_relevance" in batch:
-            output = output[
-                torch.arange(output.size(0)), batch["round_id"] - 1, :
-            ]
-            ndcg.observe(output, batch["gt_relevance"])
+    if split == 'val' and not config['dataset']['v0.9']:
+        sparse_metrics.observe(output, batch['ans_ind'])
+        output = output[torch.arange(output.size(0)), batch['round_id'] - 1, :]
+        ndcg.observe(output, batch["gt_relevance"])
 
-if args.split == "val":
-    all_metrics = {}
-    all_metrics.update(sparse_metrics.retrieve(reset=True))
-    all_metrics.update(ndcg.retrieve(reset=True))
-    for metric_name, metric_value in all_metrics.items():
-        print(f"{metric_name}: {metric_value}")
+jpath = args.output_path
 
-print("Writing ranks to {}".format(args.save_ranks_path))
-os.makedirs(os.path.dirname(args.save_ranks_path), exist_ok=True)
-json.dump(ranks_json, open(args.save_ranks_path, "w"))
+print("Writing ranks to {}".format(jpath))
+os.makedirs(os.path.dirname(jpath), exist_ok=True)
+json.dump(ranks_json, open(jpath, "w"))
+
+all_metrics = {}
+all_metrics.update(sparse_metrics.retrieve(reset=True))
+all_metrics.update(ndcg.retrieve(reset=True))
+for metric_name, metric_value in all_metrics.items():
+    print(f"{metric_name}: {metric_value}")

@@ -1,333 +1,274 @@
-import argparse
-import itertools
-
-from tensorboardX import SummaryWriter
-import numpy as np
-import torch
-from torch import nn, optim
-from torch.optim import lr_scheduler
-from torch.utils.data import DataLoader
-from tqdm import tqdm
-import yaml
 import os
-from bisect import bisect
-
-from visdial.data.dataset import VisDialDataset
-from visdial.encoders import Encoder
-from visdial.decoders import Decoder
-from visdial.metrics import SparseGTMetrics, NDCG
-from visdial.model import EncoderDecoderModel
-from visdial.utils.checkpointing import CheckpointManager, load_checkpoint
+import torch
 import random
+import numpy as np
+from torch import nn
+from tqdm import tqdm
+from visdial.model import get_model
+from torch.utils.data import DataLoader
+from visdial.data.dataset import VisDialDataset
+from visdial.metrics import SparseGTMetrics, NDCG
+from visdial.utils.checkpointing import CheckpointManager, load_checkpoint_from_config
+from visdial.utils import move_to_cuda
+from visdial.common.utils import check_flag
+from options import get_training_config_and_args
+from torch.utils.tensorboard import SummaryWriter
+from visdial.optim import Adam, LRScheduler, get_weight_decay_params
 
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "--config-yml",
-    default="configs/lf_disc_faster_rcnn_x101.yml",
-    help="Path to a config file listing reader, model and solver parameters.",
-)
-parser.add_argument(
-    "--train-json",
-    default="data/visdial_1.0_train.json",
-    help="Path to json file containing VisDial v1.0 training data.",
-)
-parser.add_argument(
-    "--val-json",
-    default="data/visdial_1.0_val.json",
-    help="Path to json file containing VisDial v1.0 validation data.",
-)
-parser.add_argument(
-    "--val-dense-json",
-    default="data/visdial_1.0_val_dense_annotations.json",
-    help="Path to json file containing VisDial v1.0 validation dense ground "
-    "truth annotations.",
-)
+config, args = get_training_config_and_args()
 
+seed = config['seed']
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
+os.environ['PYTHONHASHSEED'] = str(seed)
 
-parser.add_argument_group(
-    "Arguments independent of experiment reproducibility"
-)
-parser.add_argument(
-    "--gpu-ids",
-    nargs="+",
-    type=int,
-    default=0,
-    help="List of ids of GPUs to use.",
-)
-parser.add_argument(
-    "--cpu-workers",
-    type=int,
-    default=4,
-    help="Number of CPU workers for dataloader.",
-)
-parser.add_argument(
-    "--overfit",
-    action="store_true",
-    help="Overfit model on 5 examples, meant for debugging.",
-)
-parser.add_argument(
-    "--validate",
-    action="store_true",
-    help="Whether to validate on val split after every epoch.",
-)
-parser.add_argument(
-    "--in-memory",
-    action="store_true",
-    help="Load the whole dataset and pre-extracted image features in memory. "
-    "Use only in presence of large RAM, atleast few tens of GBs.",
-)
+print(f"CUDA number: {torch.cuda.device_count()}")
 
+"""DATASET INIT"""
+print("Loading val dataset...")
+val_dataset = VisDialDataset(config, split='val')
 
-parser.add_argument_group("Checkpointing related arguments")
-parser.add_argument(
-    "--save-dirpath",
-    default="checkpoints/",
-    help="Path of directory to create checkpoint directory and save "
-    "checkpoints.",
-)
-parser.add_argument(
-    "--load-pthpath",
-    default="",
-    help="To continue training, path to .pth file of saved checkpoint.",
-)
+if check_flag(config['dataset'], 'v0.9'):
+    val_dataset.dense_ann_feat_reader = None
 
-# For reproducibility.
-# Refer https://pytorch.org/docs/stable/notes/randomness.html
-def seed_torch(seed=1029):
-    random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed) # if you are using multi-GPU.
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
+val_dataloader = DataLoader(val_dataset,
+                            batch_size=config['solver']['batch_size'] / 2 * torch.cuda.device_count(),
+                            num_workers=config['solver']['cpu_workers'])
 
-    def worker_init_fn(worker_id):
-        np.random.seed(seed + worker_id)
-
-    return worker_init_fn
-
-init_fn = seed_torch()
-
-
-
-
-# =============================================================================
-#   INPUT ARGUMENTS AND CONFIG
-# =============================================================================
-
-args = parser.parse_args()
-
-# keys: {"dataset", "model", "solver"}
-config = yaml.load(open(args.config_yml))
-
-if isinstance(args.gpu_ids, int):
-    args.gpu_ids = [args.gpu_ids]
-device = (
-    torch.device("cuda", args.gpu_ids[0])
-    if args.gpu_ids[0] >= 0
-    else torch.device("cpu")
-)
-
-# Print config and args.
-print(yaml.dump(config, default_flow_style=False))
-for arg in vars(args):
-    print("{:<20}: {}".format(arg, getattr(args, arg)))
-
-
-# =============================================================================
-#   SETUP DATASET, DATALOADER, MODEL, CRITERION, OPTIMIZER, SCHEDULER
-# =============================================================================
-
-train_dataset = VisDialDataset(
-    config["dataset"],
-    args.train_json,
-    overfit=args.overfit,
-    in_memory=args.in_memory,
-    return_options=True if config["model"]["decoder"] == "disc" else False,
-    add_boundary_toks=False if config["model"]["decoder"] == "disc" else True,
-)
-train_dataloader = DataLoader(
-    train_dataset,
-    batch_size=config["solver"]["batch_size"],
-    num_workers=args.cpu_workers,
-    shuffle=True,
-)
-
-val_dataset = VisDialDataset(
-    config["dataset"],
-    args.val_json,
-    args.val_dense_json,
-    overfit=args.overfit,
-    in_memory=args.in_memory,
-    return_options=True,
-    add_boundary_toks=False if config["model"]["decoder"] == "disc" else True,
-)
-val_dataloader = DataLoader(
-    val_dataset,
-    batch_size=config["solver"]["batch_size"]
-    if config["model"]["decoder"] == "disc"
-    else 5,
-    num_workers=args.cpu_workers,
-    worker_init_fn=init_fn
-)
-
-# TODONE: Uncoment this overfit test
-# train_dataset = val_dataset
-# train_dataloader = val_dataloader
-
-# Pass vocabulary to construct Embedding layer.
-encoder = Encoder(config["model"], train_dataset.vocabulary)
-decoder = Decoder(config["model"], train_dataset.vocabulary)
-print("Encoder: {}".format(config["model"]["encoder"]))
-print("Decoder: {}".format(config["model"]["decoder"]))
-
-# Share word embedding between encoder and decoder.
-decoder.word_embed = encoder.word_embed
-
-# Wrap encoder and decoder in a model.
-model = EncoderDecoderModel(encoder, decoder).to(device)
-if -1 not in args.gpu_ids:
-    model = nn.DataParallel(model, args.gpu_ids)
-
-# Loss function.
-if config["model"]["decoder"] == "disc":
-    criterion = nn.CrossEntropyLoss()
-elif config["model"]["decoder"] == "gen":
-    criterion = nn.CrossEntropyLoss(
-        ignore_index=train_dataset.vocabulary.PAD_INDEX
-    )
+print("Loading train dataset...")
+if config['dataset']['overfit']:
+    train_dataset = val_dataset
+    train_dataloader = val_dataloader
 else:
-    raise NotImplementedError
+    train_dataset = VisDialDataset(config, split='train')
+    if check_flag(config['dataset'], 'v0.9'):
+        train_dataset.dense_ann_feat_reader = None
 
-if config["solver"]["training_splits"] == "trainval":
-    iterations = (len(train_dataset) + len(val_dataset)) // config["solver"][
-        "batch_size"
-    ] + 1
-else:
-    iterations = len(train_dataset) // config["solver"]["batch_size"] + 1
+    train_dataloader = DataLoader(train_dataset,
+                                  batch_size=config['solver']['batch_size'] * torch.cuda.device_count(),
+                                  num_workers=config['solver']['cpu_workers'],
+                                  shuffle=True)
 
+"""MODEL INIT"""
+print("Init model...")
+device = torch.device('cuda')
+model = get_model(config)
+model = model.to(device)
 
-def lr_lambda_fun(current_epoch: int) -> float:
-    """Returns a learning rate multiplier.
+"""LOSS FUNCTION"""
+from visdial.loss import DiscLoss
 
-    Till `warmup_epochs`, learning rate linearly increases to `initial_lr`,
-    and then gets multiplied by `lr_gamma` every time a milestone is crossed.
-    """
-    pass
+disc_criterion = DiscLoss(return_mean=True)
+gen_criterion = nn.CrossEntropyLoss(ignore_index=0)
 
+"""OPTIMIZER"""
+parameters = get_weight_decay_params(model, weight_decay=config['solver']['weight_decay'])
 
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
-# scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda_fun)
+optimizer = Adam(parameters,
+                 betas=config['solver']['adam_betas'],
+                 eps=config['solver']['adam_eps'],
+                 weight_decay=config['solver']['weight_decay'])
 
+lr_scheduler = LRScheduler(optimizer,
+                           batch_size=config['solver']['batch_size'] * torch.cuda.device_count(),
+                           num_samples=config['solver']['num_samples'],
+                           num_epochs=config['solver']['num_epochs'],
+                           min_lr=config['solver']['min_lr'],
+                           init_lr=config['solver']['init_lr'],
+                           warmup_factor=config['solver']['warmup_factor'],
+                           warmup_epochs=config['solver']['warmup_epochs'],
+                           scheduler_type=config['solver']['scheduler_type'],
+                           milestone_steps=config['solver']['milestone_steps'],
+                           linear_gama=config['solver']['linear_gama']
+                           )
 
 # =============================================================================
 #   SETUP BEFORE TRAINING LOOP
 # =============================================================================
+summary_writer = SummaryWriter(log_dir=config['callbacks']['log_dir'])
 
-summary_writer = SummaryWriter(log_dir=args.save_dirpath)
-checkpoint_manager = CheckpointManager(
-    model, optimizer, args.save_dirpath, config=config
-)
+checkpoint_manager = CheckpointManager(model, optimizer, config['callbacks']['save_dir'], config=config)
 sparse_metrics = SparseGTMetrics()
+disc_metrics = SparseGTMetrics()
+gen_metrics = SparseGTMetrics()
 ndcg = NDCG()
+disc_ndcg = NDCG()
+gen_ndcg = NDCG()
 
-# If loading from checkpoint, adjust start epoch and load parameters.
-if args.load_pthpath == "":
-    start_epoch = 0
-else:
-    # "path/to/checkpoint_xx.pth" -> xx
-    start_epoch = int(args.load_pthpath.split("_")[-1][:-4])
+print("Loading checkpoints...")
+start_epoch, model, optimizer = load_checkpoint_from_config(model, optimizer, config)
 
-    model_state_dict, optimizer_state_dict = load_checkpoint(args.load_pthpath)
-    if isinstance(model, nn.DataParallel):
-        model.module.load_state_dict(model_state_dict)
-    else:
-        model.load_state_dict(model_state_dict)
-    optimizer.load_state_dict(optimizer_state_dict)
-    print("Loaded model from {}".format(args.load_pthpath))
+if torch.cuda.device_count() > 1:
+    model = nn.DataParallel(model)
 
 # =============================================================================
 #   TRAINING LOOP
 # =============================================================================
 
-# Forever increasing counter to keep track of iterations (for tensorboard log).
+iterations = len(train_dataset) // (config['solver']['batch_size'] * torch.cuda.device_count()) + 1
+num_examples = torch.tensor(len(train_dataset), dtype=torch.float)
 global_iteration_step = start_epoch * iterations
 
-for epoch in range(start_epoch, config["solver"]["num_epochs"]):
+for epoch in range(start_epoch, config['solver']['num_epochs']):
+    print(f"Training for epoch {epoch}:")
+    print(f"Training for epoch {epoch}:")
+    if check_flag(config['dataset'], 'v0.9') and epoch > 6:
+        break
 
-    # -------------------------------------------------------------------------
-    #   ON EPOCH START  (combine dataloaders if training on train + val)
-    # -------------------------------------------------------------------------
-    if config["solver"]["training_splits"] == "trainval":
-        combined_dataloader = itertools.chain(train_dataloader, val_dataloader)
-    else:
-        combined_dataloader = itertools.chain(train_dataloader)
+    epoch_loss = torch.tensor(0.0)
+    for batch in tqdm(train_dataloader, total=iterations, unit="batch"):
+        batch = move_to_cuda(batch, device)
 
-    print(f"\nTraining for epoch {epoch}:")
-    for i, batch in enumerate(tqdm(combined_dataloader)):
-        for key in batch:
-            batch[key] = batch[key].to(device)
-
+        # zero out gradients
         optimizer.zero_grad()
-        output = model(batch)
-        target = (
-            batch["ans_ind"]
-            if config["model"]["decoder"] == "disc"
-            else batch["ans_out"]
-        )
-        batch_loss = criterion(
-            output.view(-1, output.size(-1)), target.view(-1)
-        )
+
+        # do forward
+        out = model(batch)
+
+        # compute loss
+        gen_loss = torch.tensor(0.0, requires_grad=True, device='cuda')
+        disc_loss = torch.tensor(0.0, requires_grad=True, device='cuda')
+        batch_loss = torch.tensor(0.0, requires_grad=True, device='cuda')
+        if out.get('opt_scores') is not None:
+            scores = out['opt_scores'].view(-1, 100)
+            target = batch['ans_ind'].view(-1)
+
+            sparse_metrics.observe(out['opt_scores'], batch['ans_ind'])
+            disc_loss = disc_criterion(scores, target)
+            batch_loss = batch_loss + disc_loss
+
+        if out.get('ans_out_scores') is not None:
+            scores = out['ans_out_scores'].view(-1, config['model']['txt_vocab_size'])
+            target = batch['ans_out'].view(-1)
+            gen_loss = gen_criterion(scores, target)
+            batch_loss = batch_loss + gen_loss
+
+        # compute gradients
         batch_loss.backward()
+
+        # update params
+        lr = lr_scheduler.step(global_iteration_step)
         optimizer.step()
 
-        summary_writer.add_scalar(
-            "train/loss", batch_loss, global_iteration_step
-        )
-        summary_writer.add_scalar(
-            "train/lr", optimizer.param_groups[0]["lr"], global_iteration_step
-        )
+        # logging
+        if config['dataset']['overfit']:
+            print("epoch={:02d}, steps={:03d}K: batch_loss:{:.03f} "
+                  "disc_loss:{:.03f} gen_loss:{:.03f} lr={:.05f}".format(
+                epoch, int(global_iteration_step / 1000), batch_loss.item(),
+                disc_loss.item(), gen_loss.item(), lr))
 
-        # scheduler.step(global_iteration_step)
+        if global_iteration_step % 1000 == 0:
+            print("epoch={:02d}, steps={:03d}K: batch_loss:{:.03f} "
+                  "disc_loss:{:.03f} gen_loss:{:.03f} lr={:.05f}".format(
+                epoch, int(global_iteration_step / 1000), batch_loss.item(),
+                disc_loss.item(), gen_loss.item(), lr))
+
+        summary_writer.add_scalar(config['config_name'] + "-train/batch_loss",
+                                  batch_loss.item(), global_iteration_step)
+        summary_writer.add_scalar("train/batch_lr", lr, global_iteration_step)
 
         global_iteration_step += 1
         torch.cuda.empty_cache()
 
+        epoch_loss += batch["ans"].size(0) * batch_loss.detach()
+
+    if out.get('opt_scores') is not None:
+        avg_metric_dict = {}
+        avg_metric_dict.update(sparse_metrics.retrieve(reset=True))
+
+        summary_writer.add_scalars(config['config_name'] + "-train/metrics",
+                                   avg_metric_dict, global_iteration_step)
+
+        for metric_name, metric_value in avg_metric_dict.items():
+            print(f"{metric_name}: {metric_value}")
+
+    epoch_loss /= num_examples
+    summary_writer.add_scalar(config['config_name'] + "-train/epoch_loss",
+                              epoch_loss.item(), global_iteration_step)
+
     # -------------------------------------------------------------------------
     #   ON EPOCH END  (checkpointing and validation)
     # -------------------------------------------------------------------------
-    if epoch % 50 == 0:
-        checkpoint_manager.step()
-
     # Validate and report automatic metrics.
-    if args.validate:
 
+    if config['callbacks']['validate']:
         # Switch dropout, batchnorm etc to the correct mode.
         model.eval()
 
         print(f"\nValidation after epoch {epoch}:")
-        for i, batch in enumerate(tqdm(train_dataloader)):
-            for key in batch:
-                batch[key] = batch[key].to(device)
-            with torch.no_grad():
-                output = model(batch)
-            sparse_metrics.observe(output, batch["ans_ind"])
-            if "gt_relevance" in batch:
-                output = output[
-                    torch.arange(output.size(0)), batch["round_id"] - 1, :
-                ]
-                ndcg.observe(output, batch["gt_relevance"])
 
-        all_metrics = {}
-        all_metrics.update(sparse_metrics.retrieve(reset=True))
-        all_metrics.update(ndcg.retrieve(reset=True))
-        for metric_name, metric_value in all_metrics.items():
-            print(f"{metric_name}: {metric_value}")
-        summary_writer.add_scalars(
-            "metrics", all_metrics, global_iteration_step
-        )
+        for batch in val_dataloader:
+            move_to_cuda(batch, device)
+
+            with torch.no_grad():
+                out = model(batch)
+
+                if out.get('opt_scores') is not None:
+                    scores = out['opt_scores']
+                    disc_metrics.observe(scores, batch["ans_ind"])
+
+                    if "gt_relevance" in batch:
+                        scores = scores[
+                                 torch.arange(scores.size(0)),
+                                 batch["round_id"] - 1, :]
+
+                        disc_ndcg.observe(scores, batch["gt_relevance"])
+
+                if out.get('opts_out_scores') is not None:
+                    scores = out['opts_out_scores']
+                    gen_metrics.observe(scores, batch["ans_ind"])
+
+                    if "gt_relevance" in batch:
+                        scores = scores[
+                                 torch.arange(scores.size(0)),
+                                 batch["round_id"] - 1, :]
+
+                        gen_ndcg.observe(scores, batch["gt_relevance"])
+
+                if out.get('opt_scores') is not None and out.get('opts_out_scores') is not None:
+                    scores = (out['opts_out_scores'] + out['opt_scores']) / 2
+
+                    sparse_metrics.observe(scores, batch["ans_ind"])
+                    if "gt_relevance" in batch:
+                        scores = scores[
+                                 torch.arange(scores.size(0)),
+                                 batch["round_id"] - 1, :]
+
+                        ndcg.observe(scores, batch["gt_relevance"])
+
+        avg_metric_dict = {}
+        avg_metric_dict.update(sparse_metrics.retrieve(reset=True, key='avg_'))
+        avg_metric_dict.update(ndcg.retrieve(reset=True, key='avg_'))
+
+        disc_metric_dict = {}
+        disc_metric_dict.update(disc_metrics.retrieve(reset=True, key='disc_'))
+        disc_metric_dict.update(disc_ndcg.retrieve(reset=True, key='disc_'))
+
+        gen_metric_dict = {}
+        gen_metric_dict.update(gen_metrics.retrieve(reset=True, key='gen_'))
+        gen_metric_dict.update(gen_ndcg.retrieve(reset=True, key='gen_'))
+
+        for metric_dict in [avg_metric_dict, disc_metric_dict, gen_metric_dict]:
+            for metric_name, metric_value in metric_dict.items():
+                print(f"{metric_name}: {metric_value}")
+            summary_writer.add_scalars(config['config_name'] + "-val/metrics",
+                                       metric_dict, global_iteration_step)
 
         model.train()
         torch.cuda.empty_cache()
+
+        # Checkpoint
+        if not args.overfit:
+            if 'disc' in config['model']['decoder_type']:
+                checkpoint_manager.step(epoch=epoch, only_best=False, metrics=disc_metric_dict, key='disc_')
+
+            elif 'gen' in config['model']['decoder_type']:
+                checkpoint_manager.step(epoch=epoch, only_best=False, metrics=gen_metric_dict, key='gen_')
+
+            elif 'misc' in config['model']['decoder_type']:
+                checkpoint_manager.step(epoch=epoch, only_best=False, metrics=disc_metric_dict, key='disc_')
