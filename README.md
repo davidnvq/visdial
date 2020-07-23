@@ -22,6 +22,8 @@ or as simply plain as:
 Nguyen, Van-Quang, Masanori Suganuma, and Takayuki Okatani. "Efficient Attention Mechanism for Handling All the Interactions between Many Inputs with Application to Visual Dialog." arXiv preprint arXiv:1911.11390 (2019).
 
 ```
+![](https://imgur.com/download/YRhZk2M)
+
 
 Setup and Environment
 ----------------------
