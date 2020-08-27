@@ -1,3 +1,6 @@
+
+This is the code implementation for the paper titled: "**Efficient Attention Mechanism for Visual Dialog that can Handle All the Interactions between Multiple Inputs**" (**Accepted to ECCV 2020**).
+
 Table of content
 ----------------------
   * [Setup and Environment](#setup-and-environment)
@@ -7,7 +10,6 @@ Table of content
   * [Result of Checkpoints](#result-of-checkpoints)
   * [Acknowledgements](#acknowledgements)
 
-This is the code implementation for the paper titled: "**Efficient Attention Mechanism for Visual Dialog that can Handle All the Interactions between Multiple Inputs**" (**Accepted to ECCV 2020**).
 If you find this code useful or use our method as the baseline for comparison, please kindly cite the paper with the following bibtex or the plain citation:
 
 ```
