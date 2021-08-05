@@ -14,15 +14,18 @@ Table of content
 If you find this code useful or use our method as the baseline for comparison, please kindly cite the paper with the following bibtex or the plain citation:
 
 ```
-@article{nguyen2019efficient,
-  title={Efficient Attention Mechanism for Handling All the Interactions between Many Inputs with Application to Visual Dialog},
+@inproceedings{nguyen2020efficient,
+  title={Efficient attention mechanism for visual dialog that can handle all the interactions between multiple inputs},
   author={Nguyen, Van-Quang and Suganuma, Masanori and Okatani, Takayuki},
-  journal={arXiv preprint arXiv:1911.11390},
-  year={2019}
-  
+  booktitle={Computer Vision--ECCV 2020: 16th European Conference, Glasgow, UK, August 23--28, 2020, Proceedings, Part XXIV 16},
+  pages={223--240},
+  year={2020},
+  organization={Springer}
+}
+
 or as simply plain as:
 
-Nguyen, Van-Quang, Masanori Suganuma, and Takayuki Okatani. "Efficient Attention Mechanism for Handling All the Interactions between Many Inputs with Application to Visual Dialog." arXiv preprint arXiv:1911.11390 (2019).
+Nguyen, Van-Quang, Masanori Suganuma, and Takayuki Okatani. "Efficient attention mechanism for visual dialog that can handle all the interactions between multiple inputs." Computer Vision–ECCV 2020: 16th European Conference, Glasgow, UK, August 23–28, 2020, Proceedings, Part XXIV 16. Springer International Publishing, 2020.
 
 ```
 ![](https://imgur.com/download/YRhZk2M)
